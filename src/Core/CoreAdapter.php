@@ -113,6 +113,62 @@ final class CoreAdapter {
 		);
 	}
 
+	/**
+	 * Return stable IDs and normalized locations allowed in analysis output.
+	 *
+	 * @return array<string,mixed>
+	 */
+	public function analysis_entities(): array {
+		$platform = $this->platform();
+		if ( null === $platform ) {
+			return array( 'clinic_ids' => array(), 'doctor_ids' => array(), 'locations' => array() );
+		}
+
+		$clinic_ids = $this->published_ids( 'clinic' );
+		$doctor_ids = $this->published_ids( 'doctor' );
+		$locations  = array();
+
+		foreach ( $clinic_ids as $clinic_id ) {
+			$clinic = $platform->clinics()->get( $clinic_id );
+			if ( ! is_array( $clinic ) ) {
+				continue;
+			}
+			foreach ( (array) ( $clinic['state_codes'] ?? array() ) as $code ) {
+				$code = strtoupper( sanitize_text_field( (string) $code ) );
+				if ( '' !== $code ) {
+					$locations[ 'state:' . $code ] = array(
+						'id'         => 'state:' . $code,
+						'name'       => (string) $platform->states()->name( $code ),
+						'clinic_ids' => array( $clinic_id ),
+					);
+				}
+			}
+			foreach ( (array) ( $clinic['addresses'] ?? array() ) as $address ) {
+				$city = is_array( $address ) ? sanitize_text_field( (string) ( $address['city'] ?? '' ) ) : '';
+				if ( '' === $city ) {
+					continue;
+				}
+				$state = is_array( $address ) ? strtoupper( sanitize_text_field( (string) ( $address['state'] ?? '' ) ) ) : '';
+				$id = 'city:' . ( '' !== $state ? strtolower( $state ) . ':' : '' ) . sanitize_title( $city );
+				if ( ! isset( $locations[ $id ] ) ) {
+					$locations[ $id ] = array( 'id' => $id, 'name' => $city, 'clinic_ids' => array() );
+				}
+				$locations[ $id ]['clinic_ids'][] = $clinic_id;
+			}
+		}
+
+		foreach ( $locations as &$location ) {
+			$location['clinic_ids'] = array_values( array_unique( array_map( 'absint', $location['clinic_ids'] ) ) );
+		}
+		unset( $location );
+
+		return array(
+			'clinic_ids' => $clinic_ids,
+			'doctor_ids' => $doctor_ids,
+			'locations'  => array_values( $locations ),
+		);
+	}
+
 	/** @return object|null */
 	private function platform() {
 		if ( $this->resolved ) {
