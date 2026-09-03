@@ -2,7 +2,7 @@
 
 360 AI is the general AI layer for the 360 platform. It is **not** an SEO-only plugin. SEO and GEO/AEO will be modules alongside future content, auditing, internal-linking, image, Search Console, and analytics-assisted workflows.
 
-## Current development version: 0.2.0-dev
+## Current development version: 0.2.1-dev
 
 The foundation release provides:
 
@@ -19,7 +19,9 @@ The reviewed 0.1.0 foundation is published on `main`. The current development br
 - A provider-neutral contract separates context collection, provider transport, deterministic validation, private storage, and presentation.
 - `MockProvider` supplies deterministic fixtures only when `GLOBAL360_AI_USE_MOCK_PROVIDER` is explicitly enabled locally.
 - `OpenAIProvider` uses the Responses API with strict JSON Schema structured output and `store: false`.
-- OpenAI configuration may use `GLOBAL360_AI_OPENAI_API_KEY` in `wp-config.php` or a server-side database option. The constant takes precedence.
+- `AnthropicProvider` uses the server-side Messages API with JSON Schema structured output and the pinned `claude-sonnet-5` model, selected for its balance of reasoning, latency, and cost.
+- OpenAI and Anthropic credentials are stored independently. `GLOBAL360_AI_OPENAI_API_KEY` and `GLOBAL360_AI_ANTHROPIC_API_KEY` override their respective protected database options.
+- Existing installations continue to select OpenAI by default; administrators may explicitly select Anthropic without losing either saved credential. The Mock provider remains local/test-only.
 - Blank key submissions preserve the saved key; removal requires an explicit checkbox. Keys are never rendered, logged, or stored in analysis history.
 - Validation requires exactly five opportunities, controlled types/categories, existing entity/link IDs, duplicate checks, and Core-grounded local recommendations.
 - Private option-based history retains ten records with provider/model, context hash, status, token usage, errors, and validated recommendations—never the key or full site-analysis context.
@@ -47,6 +49,7 @@ Run focused tests with:
 ```bash
 php tests/run.php
 php tests/analysis.php
+php tests/anthropic.php
 ```
 
 Run `tests/local-integration.php` only against a local development WordPress installation.

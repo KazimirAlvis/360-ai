@@ -23,7 +23,7 @@ final class OpenAIProvider implements ProviderInterface {
 		$payload = array(
 			'model' => $this->model(),
 			'store' => false,
-			'instructions' => 'Identify five genuine, non-duplicative educational content gaps for this medical site. Do not invent facts, studies, efficacy, diagnoses, providers, clinics, or locations. Local recommendations must use supplied stable IDs. Return exactly five opportunities.',
+			'instructions' => OpportunityRequest::instructions(),
 			'input' => wp_json_encode( $context ),
 			'text'  => array( 'format' => self::format() ),
 		);
@@ -63,30 +63,9 @@ final class OpenAIProvider implements ProviderInterface {
 
 	/** @return array<string,mixed> */
 	public static function format(): array {
-		$string = array( 'type' => 'string' );
-		$ids = array( 'type' => 'array', 'items' => array( 'type' => 'integer' ) );
 		return array(
 			'type' => 'json_schema', 'name' => 'content_opportunities', 'strict' => true,
-			'schema' => array(
-				'type' => 'object', 'additionalProperties' => false, 'required' => array( 'opportunities' ),
-				'properties' => array( 'opportunities' => array(
-					'type' => 'array', 'minItems' => 5, 'maxItems' => 5,
-					'items' => array(
-						'type' => 'object', 'additionalProperties' => false,
-						'required' => array( 'id', 'proposed_title', 'suggested_slug', 'content_type', 'category', 'target_topic', 'search_intent', 'rationale', 'audience', 'geo_scope', 'relevant_location_ids', 'relevant_clinic_ids', 'relevant_doctor_ids', 'suggested_internal_link_ids', 'priority', 'confidence' ),
-						'properties' => array(
-							'id' => $string, 'proposed_title' => $string, 'suggested_slug' => $string,
-							'content_type' => array( 'type' => 'string', 'enum' => array( 'page', 'post' ) ),
-							'category' => array( 'type' => 'string', 'enum' => array( 'informational', 'treatment', 'symptom', 'comparison', 'local', 'faq_aeo' ) ),
-							'target_topic' => $string, 'search_intent' => $string, 'rationale' => $string, 'audience' => $string, 'geo_scope' => $string,
-							'relevant_location_ids' => array( 'type' => 'array', 'items' => $string ),
-							'relevant_clinic_ids' => $ids, 'relevant_doctor_ids' => $ids, 'suggested_internal_link_ids' => $ids,
-							'priority' => array( 'type' => 'integer', 'minimum' => 0, 'maximum' => 100 ),
-							'confidence' => array( 'type' => 'number', 'minimum' => 0, 'maximum' => 1 ),
-						),
-					),
-				) ),
-			),
+			'schema' => OpportunityRequest::schema(),
 		);
 	}
 

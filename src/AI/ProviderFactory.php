@@ -13,6 +13,10 @@ final class ProviderFactory {
 		if ( defined( 'GLOBAL360_AI_USE_MOCK_PROVIDER' ) && true === GLOBAL360_AI_USE_MOCK_PROVIDER ) {
 			return new MockProvider();
 		}
-		return new OpenAIProvider( $this->keys->get() );
+		$provider = $this->keys->selected_provider();
+		if ( 'anthropic' === $provider ) {
+			return new AnthropicProvider( $this->keys->get_for( 'anthropic' ) );
+		}
+		return new OpenAIProvider( $this->keys->get_for( 'openai' ) );
 	}
 }

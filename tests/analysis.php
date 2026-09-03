@@ -18,8 +18,10 @@ function wp_generate_uuid4() { return '00000000-0000-4000-8000-000000000001'; }
 
 require_once dirname( __DIR__ ) . '/src/AI/ProviderInterface.php';
 require_once dirname( __DIR__ ) . '/src/AI/AnalysisResponse.php';
+require_once dirname( __DIR__ ) . '/src/AI/OpportunityRequest.php';
 require_once dirname( __DIR__ ) . '/src/AI/MockProvider.php';
 require_once dirname( __DIR__ ) . '/src/AI/OpenAIProvider.php';
+require_once dirname( __DIR__ ) . '/src/AI/AnthropicProvider.php';
 require_once dirname( __DIR__ ) . '/src/Settings/ApiKeyManager.php';
 require_once dirname( __DIR__ ) . '/src/AI/ProviderFactory.php';
 require_once dirname( __DIR__ ) . '/src/Analysis/OpportunityValidator.php';

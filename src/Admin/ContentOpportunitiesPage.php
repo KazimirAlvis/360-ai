@@ -19,7 +19,7 @@ final class ContentOpportunitiesPage {
 	public function register_hooks(): void {
 		add_action( 'admin_menu', array( $this, 'register_menu' ) );
 		add_action( 'admin_post_global360_ai_analyze', array( $this, 'handle_analyze' ) );
-		add_action( 'admin_post_global360_ai_save_key', array( $this, 'handle_save_key' ) );
+		add_action( 'admin_post_global360_ai_save_provider', array( $this, 'handle_save_provider' ) );
 	}
 
 	public function register_menu(): void {
@@ -36,9 +36,11 @@ final class ContentOpportunitiesPage {
 		}
 	}
 
-	public function handle_save_key(): void {
-		$this->authorize( 'global360_ai_save_key' );
-		$this->keys->save( (string) ( $_POST['openai_api_key'] ?? '' ), ! empty( $_POST['remove_openai_api_key'] ) );
+	public function handle_save_provider(): void {
+		$this->authorize( 'global360_ai_save_provider' );
+		$this->keys->save_selected_provider( (string) ( $_POST['ai_provider'] ?? '' ) );
+		$this->keys->save_for( 'openai', (string) ( $_POST['openai_api_key'] ?? '' ), ! empty( $_POST['remove_openai_api_key'] ) );
+		$this->keys->save_for( 'anthropic', (string) ( $_POST['anthropic_api_key'] ?? '' ), ! empty( $_POST['remove_anthropic_api_key'] ) );
 		$this->redirect( 'settings_saved' );
 	}
 
@@ -50,13 +52,15 @@ final class ContentOpportunitiesPage {
 		<p><?php echo esc_html__( 'Analyze published site context and receive exactly five human-review recommendations. This tool never creates content.', '360-ai' ); ?></p>
 		<?php $this->notice(); ?>
 		<h2><?php echo esc_html__( 'Provider Configuration', '360-ai' ); ?></h2>
-		<p><?php echo esc_html( sprintf( __( 'OpenAI key status: %s. A GLOBAL360_AI_OPENAI_API_KEY constant takes precedence over the saved database value.', '360-ai' ), $this->keys->source() ) ); ?></p>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-			<input type="hidden" name="action" value="global360_ai_save_key"><?php wp_nonce_field( 'global360_ai_save_key' ); ?>
-			<label for="global360-ai-key"><?php echo esc_html__( 'OpenAI API key', '360-ai' ); ?></label>
-			<input id="global360-ai-key" name="openai_api_key" type="password" value="" autocomplete="new-password" <?php disabled( 'constant', $this->keys->source() ); ?>>
-			<label><input type="checkbox" name="remove_openai_api_key" value="1" <?php disabled( 'constant', $this->keys->source() ); ?>> <?php echo esc_html__( 'Remove saved key', '360-ai' ); ?></label>
-			<?php submit_button( __( 'Save Provider Settings', '360-ai' ), 'secondary', 'submit', false ); ?>
+			<input type="hidden" name="action" value="global360_ai_save_provider"><?php wp_nonce_field( 'global360_ai_save_provider' ); ?>
+			<fieldset><legend><strong><?php echo esc_html__( 'Provider', '360-ai' ); ?></strong></legend>
+				<label><input type="radio" name="ai_provider" value="openai" <?php checked( 'openai', $this->keys->selected_provider() ); ?>> <?php echo esc_html__( 'OpenAI', '360-ai' ); ?></label><br>
+				<label><input type="radio" name="ai_provider" value="anthropic" <?php checked( 'anthropic', $this->keys->selected_provider() ); ?>> <?php echo esc_html__( 'Anthropic / Claude', '360-ai' ); ?></label>
+			</fieldset>
+			<?php $this->key_fields( 'openai', 'OpenAI', 'GLOBAL360_AI_OPENAI_API_KEY' ); ?>
+			<?php $this->key_fields( 'anthropic', 'Anthropic / Claude', 'GLOBAL360_AI_ANTHROPIC_API_KEY' ); ?>
+			<?php submit_button( __( 'Save Provider Configuration', '360-ai' ), 'secondary', 'submit', false ); ?>
 		</form>
 		<h2><?php echo esc_html__( 'Site Analysis', '360-ai' ); ?></h2>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
@@ -90,8 +94,21 @@ final class ContentOpportunitiesPage {
 	}
 
 	private function safe_error( string $message ): string {
-		$allowed = array( '360 Platform Core is required for site analysis.', 'No analysis provider is configured.', 'The provider request failed.', 'The provider returned an HTTP error.', 'The provider returned invalid structured output.' );
+		$allowed = array( '360 Platform Core is required for site analysis.', 'OpenAI is selected but no OpenAI API key is configured.', 'Anthropic is selected but no Anthropic API key is configured.', 'The provider request failed.', 'The provider returned an HTTP error.', 'The provider returned invalid structured output.', 'The Anthropic request failed.', 'Anthropic authentication failed.', 'Anthropic rate limit exceeded.', 'Anthropic returned an HTTP error.', 'Anthropic returned invalid structured output.' );
 		return in_array( $message, $allowed, true ) ? $message : 'Analysis failed validation. No recommendations were saved.';
+	}
+
+	private function key_fields( string $provider, string $label, string $constant ): void {
+		$source = $this->keys->source_for( $provider );
+		$status = 'none' === $source ? __( 'Not configured', '360-ai' ) : ( 'constant' === $source ? __( 'Configured by server constant', '360-ai' ) : __( 'Configured', '360-ai' ) );
+		?>
+		<fieldset><legend><strong><?php echo esc_html( $label ); ?></strong></legend>
+			<p><?php echo esc_html( sprintf( __( 'Status: %s.', '360-ai' ), $status ) ); ?> <?php if ( 'constant' === $source ) { echo esc_html( sprintf( __( '%s takes precedence and cannot be changed here.', '360-ai' ), $constant ) ); } ?></p>
+			<label for="global360-ai-<?php echo esc_attr( $provider ); ?>-key"><?php echo esc_html( sprintf( __( '%s API key', '360-ai' ), $label ) ); ?></label>
+			<input id="global360-ai-<?php echo esc_attr( $provider ); ?>-key" name="<?php echo esc_attr( $provider ); ?>_api_key" type="password" value="" autocomplete="new-password" <?php disabled( 'constant', $source ); ?>>
+			<label><input type="checkbox" name="remove_<?php echo esc_attr( $provider ); ?>_api_key" value="1" <?php disabled( 'constant', $source ); ?>> <?php echo esc_html( sprintf( __( 'Remove stored %s key', '360-ai' ), $label ) ); ?></label>
+		</fieldset>
+		<?php
 	}
 
 	private function notice(): void {

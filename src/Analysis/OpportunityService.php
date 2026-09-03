@@ -24,8 +24,9 @@ final class OpportunityService {
 		}
 		$provider = $this->providers->create();
 		if ( ! $provider->is_configured() ) {
-			$this->save_failure( $provider->name(), $provider->model(), $context_hash, 'No analysis provider is configured.' );
-			throw new \RuntimeException( 'No analysis provider is configured.' );
+			$error = 'anthropic' === $provider->name() ? 'Anthropic is selected but no Anthropic API key is configured.' : 'OpenAI is selected but no OpenAI API key is configured.';
+			$this->save_failure( $provider->name(), $provider->model(), $context_hash, $error );
+			throw new \RuntimeException( $error );
 		}
 		$response = $provider->analyze( $context );
 		if ( ! $response->is_success() ) {
