@@ -85,6 +85,10 @@ $validator = new OpportunityValidator();
 analysis_expect( 5 === count( $validator->validate( fixture_five(), $context ) ), 'exactly-five opportunity schema validates' );
 analysis_rejects( static function () use ( $validator, $context ) { $validator->validate( array_slice( fixture_five(), 0, 4 ), $context ); }, 'four opportunities are rejected' );
 analysis_rejects( static function () use ( $validator, $context ) { $items = fixture_five(); $items[] = fixture_opportunity( 6 ); $validator->validate( $items, $context ); }, 'six opportunities are rejected' );
+analysis_rejects( static function () use ( $validator, $context ) { $items = fixture_five(); $items[0]['priority'] = -1; $validator->validate( $items, $context ); }, 'priority below zero is rejected' );
+analysis_rejects( static function () use ( $validator, $context ) { $items = fixture_five(); $items[0]['priority'] = 101; $validator->validate( $items, $context ); }, 'priority above 100 is rejected' );
+analysis_rejects( static function () use ( $validator, $context ) { $items = fixture_five(); $items[0]['confidence'] = -0.1; $validator->validate( $items, $context ); }, 'confidence below zero is rejected' );
+analysis_rejects( static function () use ( $validator, $context ) { $items = fixture_five(); $items[0]['confidence'] = 1.1; $validator->validate( $items, $context ); }, 'confidence above one is rejected' );
 analysis_rejects( static function () use ( $validator, $context ) { $items = fixture_five(); $items[0]['content_type'] = 'clinic'; $validator->validate( $items, $context ); }, 'invalid content type is rejected' );
 analysis_rejects( static function () use ( $validator, $context ) { $items = fixture_five(); $items[0]['category'] = 'doorway'; $validator->validate( $items, $context ); }, 'invalid category is rejected' );
 analysis_rejects( static function () use ( $validator, $context ) { $items = fixture_five(); $items[1]['proposed_title'] = $items[0]['proposed_title']; $validator->validate( $items, $context ); }, 'duplicate recommendation titles are rejected' );
@@ -111,6 +115,10 @@ $id = $repository->save( array( 'provider' => 'mock', 'model' => 'fixture', 'con
 $saved = $repository->latest();
 analysis_expect( $id === $saved['analysis_id'] && 46 === $saved['usage']['total_tokens'], 'analysis history and token usage are stored' );
 analysis_expect( ! isset( $saved['api_key'] ), 'analysis history strips API-key material' );
+$repository->save( array( 'provider' => 'anthropic', 'status' => 'failed', 'diagnostics' => array( 'http_status' => 400, 'provider_error_type' => 'invalid_request_error', 'provider_error_message' => 'Example validation failure.', 'provider_request_id' => 'req_test123' ), 'headers' => array( 'x-api-key' => 'must-not-persist' ), 'request_body' => 'must-not-persist', 'raw_response' => 'must-not-persist' ) );
+$saved_failure = $repository->latest();
+analysis_expect( 400 === $saved_failure['diagnostics']['http_status'] && 'req_test123' === $saved_failure['diagnostics']['provider_request_id'], 'sanitized Anthropic diagnostics persist in private history' );
+analysis_expect( ! isset( $saved_failure['headers'], $saved_failure['request_body'], $saved_failure['raw_response'] ), 'analysis history strips raw provider request and response material' );
 
 $keys = new ApiKeyManager();
 $keys->save( 'secret-value' );

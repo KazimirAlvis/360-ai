@@ -13,7 +13,7 @@ final class AnalysisRepository {
 		$record['analysis_id'] = $id;
 		$record['timestamp'] = gmdate( 'c' );
 		$record['plugin_version'] = defined( 'GLOBAL360_AI_VERSION' ) ? GLOBAL360_AI_VERSION : '';
-		unset( $record['api_key'], $record['authorization'], $record['context'] );
+		unset( $record['api_key'], $record['authorization'], $record['headers'], $record['request'], $record['request_body'], $record['payload'], $record['raw_response'], $record['context'] );
 		array_unshift( $history, $record );
 		update_option( self::OPTION, array_slice( $history, 0, self::LIMIT ), false );
 		return $id;

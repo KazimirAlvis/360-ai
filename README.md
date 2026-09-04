@@ -2,7 +2,7 @@
 
 360 AI is the general AI layer for the 360 platform. It is **not** an SEO-only plugin. SEO and GEO/AEO will be modules alongside future content, auditing, internal-linking, image, Search Console, and analytics-assisted workflows.
 
-## Current development version: 0.2.1-dev
+## Current development version: 0.2.2-dev
 
 The foundation release provides:
 

@@ -95,6 +95,7 @@ final class ContentOpportunitiesPage {
 
 	private function safe_error( string $message ): string {
 		$allowed = array( '360 Platform Core is required for site analysis.', 'OpenAI is selected but no OpenAI API key is configured.', 'Anthropic is selected but no Anthropic API key is configured.', 'The provider request failed.', 'The provider returned an HTTP error.', 'The provider returned invalid structured output.', 'The Anthropic request failed.', 'Anthropic authentication failed.', 'Anthropic rate limit exceeded.', 'Anthropic returned an HTTP error.', 'Anthropic returned invalid structured output.' );
+		if ( preg_match( '/^Anthropic request failed \(HTTP [1-5][0-9]{2}(?:: [a-z0-9_-]{1,64})?\)\.$/', $message ) ) { return $message; }
 		return in_array( $message, $allowed, true ) ? $message : 'Analysis failed validation. No recommendations were saved.';
 	}
 

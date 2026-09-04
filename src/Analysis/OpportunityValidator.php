@@ -63,6 +63,10 @@ final class OpportunityValidator {
 					throw new \InvalidArgumentException( 'A local recommendation references a Clinic outside its selected location.' );
 				}
 			}
+			$priority = (int) ( $item['priority'] ?? 0 );
+			$confidence = (float) ( $item['confidence'] ?? 0 );
+			if ( 0 > $priority || 100 < $priority ) { throw new \InvalidArgumentException( 'Opportunity priority must be between 0 and 100.' ); }
+			if ( 0 > $confidence || 1 < $confidence ) { throw new \InvalidArgumentException( 'Opportunity confidence must be between 0 and 1.' ); }
 
 			$clean[] = array(
 				'id' => sanitize_key( (string) ( $item['id'] ?? 'opportunity-' . ( $index + 1 ) ) ),
@@ -73,8 +77,8 @@ final class OpportunityValidator {
 				'audience' => sanitize_text_field( (string) ( $item['audience'] ?? '' ) ), 'geo_scope' => $geo_scope,
 				'relevant_location_ids' => $locations, 'relevant_clinic_ids' => $clinics, 'relevant_doctor_ids' => $doctors,
 				'suggested_internal_link_ids' => $links,
-				'priority' => max( 0, min( 100, (int) ( $item['priority'] ?? 0 ) ) ),
-				'confidence' => max( 0, min( 1, (float) ( $item['confidence'] ?? 0 ) ) ),
+				'priority' => $priority,
+				'confidence' => $confidence,
 			);
 		}
 		return $clean;

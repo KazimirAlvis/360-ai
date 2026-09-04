@@ -30,7 +30,7 @@ final class OpportunityService {
 		}
 		$response = $provider->analyze( $context );
 		if ( ! $response->is_success() ) {
-			$this->save_failure( $response->provider, $response->model, $context_hash, $response->error ?: 'The analysis provider failed.' );
+			$this->save_failure( $response->provider, $response->model, $context_hash, $response->error ?: 'The analysis provider failed.', $response->diagnostics );
 			throw new \RuntimeException( $response->error ?: 'The analysis provider failed.' );
 		}
 		try {
@@ -56,12 +56,22 @@ final class OpportunityService {
 		return $record;
 	}
 
-	private function save_failure( string $provider, string $model, string $context_hash, string $error ): void {
+	private function save_failure( string $provider, string $model, string $context_hash, string $error, array $diagnostics = array() ): void {
+		$safe_diagnostics = array();
+		if ( $diagnostics ) {
+			$safe_diagnostics = array(
+				'http_status'            => max( 0, min( 599, (int) ( $diagnostics['http_status'] ?? 0 ) ) ),
+				'provider_error_type'    => substr( sanitize_key( (string) ( $diagnostics['provider_error_type'] ?? '' ) ), 0, 64 ),
+				'provider_error_message' => substr( sanitize_text_field( (string) ( $diagnostics['provider_error_message'] ?? '' ) ), 0, 300 ),
+				'provider_request_id'    => substr( preg_replace( '/[^A-Za-z0-9_-]/', '', (string) ( $diagnostics['provider_request_id'] ?? '' ) ), 0, 128 ),
+			);
+		}
 		$this->repository->save( array(
 			'provider' => $provider, 'model' => $model, 'context_hash' => $context_hash,
 			'status' => 'failed', 'opportunities' => array(),
 			'usage' => array( 'input_tokens' => 0, 'output_tokens' => 0, 'total_tokens' => 0 ),
 			'error' => sanitize_text_field( $error ),
+			'diagnostics' => $safe_diagnostics,
 		) );
 	}
 }

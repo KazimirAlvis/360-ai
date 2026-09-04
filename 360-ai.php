@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 360 AI
  * Description: General AI foundation and future AI-assisted workflows for the 360 platform.
- * Version: 0.2.1-dev
+ * Version: 0.2.2-dev
  * Author: PR360
  * Requires at least: 6.0
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'GLOBAL360_AI_VERSION', '0.2.1-dev' );
+define( 'GLOBAL360_AI_VERSION', '0.2.2-dev' );
 define( 'GLOBAL360_AI_FILE', __FILE__ );
 define( 'GLOBAL360_AI_PATH', plugin_dir_path( __FILE__ ) );
 
