@@ -35,9 +35,10 @@ final class LocalFailingDraftProvider implements ProviderInterface {
 	public function generate_draft( array $context ): DraftResponse { return DraftResponse::failure( $this->name(), $this->model(), 'Fixture provider failure.', array( 'http_status' => 429, 'provider_error_type' => 'rate_limit_error', 'provider_error_message' => 'Fixture.', 'provider_request_id' => 'req_fixture' ) ); }
 }
 final class LocalInvalidDraftProvider implements ProviderInterface {
+	public static $calls = 0;
 	public function name(): string { return 'fixture-invalid'; } public function model(): string { return 'fixture'; } public function is_configured(): bool { return true; }
 	public function analyze( array $context ): AnalysisResponse { return AnalysisResponse::failure( $this->name(), $this->model(), 'Not used.' ); }
-	public function generate_draft( array $context ): DraftResponse { $response = ( new MockProvider() )->generate_draft( $context ); $response->draft['content'] .= '<script>alert(1)</script>'; return $response; }
+	public function generate_draft( array $context ): DraftResponse { self::$calls++; $response = ( new MockProvider() )->generate_draft( $context ); $response->draft['content'] .= '<h4 class="private-value" onclick="privateValue()">Private generated article text must not persist.</h4>'; $response->usage = array( 'input_tokens' => 321, 'output_tokens' => 654, 'total_tokens' => 975 ); return $response; }
 }
 final class LocalProviderFactory extends ProviderFactory {
 	private $fixture;
@@ -112,10 +113,16 @@ try {
 	local_draft_expect( $lock->acquire( $analysis_id, 'draft-e2e-provider-failure' ), 'generation lock clears after provider failure' ); $lock->release( $analysis_id, 'draft-e2e-provider-failure' );
 
 	$workflow->transition( $analysis_id, 'draft-e2e-validation-failure', 'approved' );
+	LocalInvalidDraftProvider::$calls = 0;
 	$invalid = new DraftService( $workflow, new DraftGenerationContextBuilder( $analysis, $adapter ), new LocalProviderFactory( new LocalInvalidDraftProvider() ), new DraftValidator(), $lock );
 	try { $invalid->generate( $analysis_id, 'draft-e2e-validation-failure', (int) $admins[0] ); local_draft_expect( false, 'invalid provider draft cannot be inserted' ); } catch ( InvalidArgumentException $error ) { local_draft_expect( true, 'validation failure creates no draft and performs no repair' ); }
 	$invalid_state = $workflow->get( $analysis_id, 'draft-e2e-validation-failure' );
 	local_draft_expect( 'approved' === $invalid_state['status'] && false !== strpos( $invalid_state['generation_error'], 'deterministic validation' ), 'validation failure leaves opportunity approved with sanitized failure' );
+	$attempt = end( $invalid_state['generation_attempts'] );
+	local_draft_expect( 1 === LocalInvalidDraftProvider::$calls && 'validation_failed' === $attempt['status'] && 975 === $attempt['usage']['total_tokens'], 'validation failure records one paid provider attempt and token usage' );
+	local_draft_expect( 'content' === $attempt['diagnostics']['validation_field'] && 'unsafe_markup' === $attempt['diagnostics']['validation_rule'] && array( 'h4' ) === $attempt['diagnostics']['unsupported_tags'] && array( 'onclick' ) === $attempt['diagnostics']['unsafe_attributes'], 'validation attempt stores bounded structural diagnostics' );
+	$serialized_failure = serialize( $invalid_state );
+	foreach ( array( 'Private generated article text', 'private-value', 'privateValue()', 'mock-api-key', 'Authorization', 'allowed_internal_links' ) as $forbidden ) { local_draft_expect( false === strpos( $serialized_failure, $forbidden ), 'failure storage excludes sensitive/generated value: ' . $forbidden ); }
 	local_draft_expect( $lock->acquire( $analysis_id, 'draft-e2e-validation-failure' ), 'generation lock clears after validation failure' ); $lock->release( $analysis_id, 'draft-e2e-validation-failure' );
 
 	ob_start(); $page->render(); $created_html = ob_get_clean();

@@ -26,6 +26,9 @@ function ai_analysis_integration_expect( $condition, $message ) {
 }
 
 global $wpdb;
+$history_option = 'global360_ai_analysis_history';
+$original_history = get_option( $history_option, array() );
+register_shutdown_function( static function () use ( $history_option, $original_history ) { update_option( $history_option, $original_history, false ); } );
 $before_counts = array( 'page' => (int) wp_count_posts( 'page' )->publish, 'post' => (int) wp_count_posts( 'post' )->publish );
 $entity_ids = get_posts( array( 'post_type' => array( 'clinic', 'doctor' ), 'post_status' => 'any', 'posts_per_page' => -1, 'fields' => 'ids', 'no_found_rows' => true ) );
 $before_entity_meta = array();

@@ -27,6 +27,7 @@ $global360_ai_files = array(
 	'src/AI/ProviderInterface.php',
 	'src/AI/AnalysisResponse.php',
 	'src/Generation/DraftResponse.php',
+	'src/Generation/DraftValidationException.php',
 	'src/Generation/DraftRequest.php',
 	'src/AI/OpportunityRequest.php',
 	'src/AI/MockProvider.php',

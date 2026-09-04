@@ -28,10 +28,12 @@ require_once dirname( __DIR__ ) . '/src/Storage/WorkflowRepository.php';
 require_once dirname( __DIR__ ) . '/src/Security/WorkflowRequestGuard.php';
 require_once dirname( __DIR__ ) . '/src/Generation/DraftRequest.php';
 require_once dirname( __DIR__ ) . '/src/Generation/DraftResponse.php';
+require_once dirname( __DIR__ ) . '/src/Generation/DraftValidationException.php';
 require_once dirname( __DIR__ ) . '/src/Generation/DraftValidator.php';
 require_once dirname( __DIR__ ) . '/src/Generation/GenerationLock.php';
 
 use Global360\AI\Generation\DraftRequest;
+use Global360\AI\Generation\DraftValidationException;
 use Global360\AI\Generation\DraftValidator;
 use Global360\AI\Generation\GenerationLock;
 use Global360\AI\Security\WorkflowRequestGuard;
@@ -40,6 +42,7 @@ use Global360\AI\Storage\WorkflowRepository;
 
 function draft_expect( $condition, $message ) { if ( ! $condition ) { throw new RuntimeException( $message ); } echo "PASS: {$message}\n"; }
 function draft_rejects( callable $callback, $message ) { try { $callback(); } catch ( Throwable $error ) { draft_expect( true, $message ); return; } draft_expect( false, $message ); }
+function draft_validation_diagnostics( callable $callback ) { try { $callback(); } catch ( DraftValidationException $error ) { return $error->diagnostics(); } throw new RuntimeException( 'Expected DraftValidationException.' ); }
 
 function draft_opportunity( $id, $type = 'post' ) {
 	return array( 'id' => $id, 'proposed_title' => 'Approved Educational Topic ' . $id, 'suggested_slug' => 'approved-educational-topic-' . $id, 'content_type' => $type, 'category' => 'informational', 'suggested_internal_link_ids' => array( 101 ), 'relevant_clinic_ids' => array(), 'relevant_doctor_ids' => array(), 'relevant_location_ids' => array() );
@@ -91,6 +94,8 @@ $valid = array(
 );
 $validator = new DraftValidator();
 draft_expect( $valid['slug'] === $validator->validate( $valid, $opportunity, $context )['slug'], 'valid semantic HTML draft is accepted' );
+$semantic = $valid; $semantic['content'] = '<p>' . str_repeat( 'Educational information for review. ', 7 ) . '</p><h2>Heading</h2><h3>Subheading</h3><ul><li><strong>Strong</strong></li></ul><ol><li><em>Emphasis</em></li></ol>';
+draft_expect( $semantic['content'] === $validator->validate( $semantic, $opportunity, $context )['content'], 'exact semantic allowlist passes without sanitization' );
 foreach ( array( 'title', 'slug', 'excerpt', 'content' ) as $field ) {
 	draft_rejects( static function () use ( $validator, $valid, $opportunity, $context, $field ) { $item = $valid; $item[ $field ] = ''; $validator->validate( $item, $opportunity, $context ); }, 'empty ' . $field . ' is rejected' );
 }
@@ -104,6 +109,25 @@ draft_rejects( static function () use ( $validator, $valid, $opportunity, $conte
 foreach ( array( '<script>alert(1)</script>', '<iframe src="x"></iframe>', '<form></form>', '<p onclick="x()">click</p>', '<a href="javascript:alert(1)">link</a>', '<a href="https://unapproved.example">link</a>', '```html', '[arbitrary_shortcode]', '<h1>Unexpected H1</h1>' ) as $unsafe ) {
 	draft_rejects( static function () use ( $validator, $valid, $opportunity, $context, $unsafe ) { $item = $valid; $item['content'] .= $unsafe; $validator->validate( $item, $opportunity, $context ); }, 'unsafe draft construct is rejected: ' . substr( $unsafe, 0, 24 ) );
 }
+$unsupported = $valid; $unsupported['content'] .= '<h4>Private words</h4><div><span>Never persist this sentence.</span></div><table><tr><td>Secret prose</td></tr></table>';
+$unsupported_diagnostics = draft_validation_diagnostics( static function () use ( $validator, $unsupported, $opportunity, $context ) { $validator->validate( $unsupported, $opportunity, $context ); } );
+draft_expect( array( 'div', 'h4', 'span', 'table', 'td', 'tr' ) === $unsupported_diagnostics['unsupported_tags'], 'unsupported non-dangerous tags are diagnosed, deduplicated, and sorted' );
+$unsafe = $valid; $unsafe['content'] .= '<script>privateText()</script><iframe src="private"></iframe><form><input onerror="private()"></form><style>.private{}</style><svg onclick="private()"></svg>';
+$unsafe_diagnostics = draft_validation_diagnostics( static function () use ( $validator, $unsafe, $opportunity, $context ) { $validator->validate( $unsafe, $opportunity, $context ); } );
+draft_expect( 'unsafe_markup' === $unsafe_diagnostics['validation_rule'] && array( 'form', 'iframe', 'input', 'script', 'style', 'svg' ) === $unsafe_diagnostics['unsafe_tags'], 'unsafe tags are structurally classified' );
+draft_expect( array( 'onclick', 'onerror' ) === $unsafe_diagnostics['unsafe_attributes'], 'event-handler attributes are classified as unsafe and deduplicated' );
+$attributes = $valid; $attributes['content'] .= '<p class="private prose" id="private" style="color:red" onclick="private()">Never store these words.</p><p class="again">Repeated.</p>';
+$attribute_diagnostics = draft_validation_diagnostics( static function () use ( $validator, $attributes, $opportunity, $context ) { $validator->validate( $attributes, $opportunity, $context ); } );
+draft_expect( array( 'class', 'id', 'style' ) === $attribute_diagnostics['unsupported_attributes'] && array( 'onclick' ) === $attribute_diagnostics['unsafe_attributes'], 'disallowed and unsafe attributes are separated' );
+$common = $valid; $common['content'] .= '<a href="javascript:private()">Link</a><blockquote>Quote</blockquote><h4>Heading</h4><br><hr><b>Bold</b><i>Italic</i>';
+$common_diagnostics = draft_validation_diagnostics( static function () use ( $validator, $common, $opportunity, $context ) { $validator->validate( $common, $opportunity, $context ); } );
+draft_expect( array( 'a', 'b', 'blockquote', 'br', 'h4', 'hr', 'i' ) === $common_diagnostics['unsupported_tags'] && array( 'href' ) === $common_diagnostics['unsafe_attributes'], 'anchors and optional common article tags remain explicitly rejected, including javascript URLs' );
+draft_expect( false === strpos( serialize( array( $unsupported_diagnostics, $unsafe_diagnostics, $attribute_diagnostics ) ), 'Never persist' ) && false === strpos( serialize( $unsafe_diagnostics ), 'privateText' ), 'validation diagnostics contain no generated prose or attribute values' );
+$many_tags = array(); $many_attributes = array(); for ( $i = 0; $i < 30; $i++ ) { $many_tags[] = 'tag-' . $i . '<private>'; $many_attributes[] = 'attribute-' . $i . '<private>'; }
+$workflow->record_failure( $analysis_id, 'one', 'Bounded fixture.', array( 'unsupported_tags' => $many_tags, 'unsupported_attributes' => $many_attributes ) );
+$bounded = $workflow->get( $analysis_id, 'one' )['generation_diagnostics'];
+draft_expect( 10 === count( $bounded['unsupported_tags'] ) && 20 === count( $bounded['unsupported_attributes'] ), 'stored structural diagnostics enforce tag and attribute count bounds' );
+draft_expect( false === strpos( serialize( $bounded ), '<private>' ), 'stored structural diagnostics retain only normalized name characters' );
 draft_expect( 10 === DraftRequest::schema()['properties']['suggested_internal_link_ids']['maxItems'], 'canonical draft schema retains internal-link limit' );
 
 echo "360 AI draft workflow and validator tests passed.\n";

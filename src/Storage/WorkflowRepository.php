@@ -46,16 +46,51 @@ final class WorkflowRepository {
 	public function record_failure( string $analysis_id, string $opportunity_id, string $message, array $diagnostics = array() ): void {
 		$current = $this->get( $analysis_id, $opportunity_id );
 		$current['generation_error'] = substr( sanitize_text_field( $message ), 0, 300 );
-		$current['generation_diagnostics'] = array(
-			'http_status' => max( 0, min( 599, (int) ( $diagnostics['http_status'] ?? 0 ) ) ),
-			'provider_error_type' => substr( sanitize_key( (string) ( $diagnostics['provider_error_type'] ?? '' ) ), 0, 64 ),
-			'provider_error_message' => substr( sanitize_text_field( (string) ( $diagnostics['provider_error_message'] ?? '' ) ), 0, 300 ),
-			'provider_request_id' => substr( preg_replace( '/[^A-Za-z0-9_-]/', '', (string) ( $diagnostics['provider_request_id'] ?? '' ) ), 0, 128 ),
-		);
+		$current['generation_diagnostics'] = $this->sanitize_diagnostics( $diagnostics );
 		$current['updated_at'] = gmdate( 'c' );
 		$records = $this->records();
 		$records[ $this->key( $analysis_id, $opportunity_id ) ] = $current;
 		update_option( self::OPTION, $records, false );
+	}
+
+	/** @param array<string,mixed> $attempt */
+	public function record_generation_attempt( string $analysis_id, string $opportunity_id, array $attempt ): void {
+		$current = $this->get( $analysis_id, $opportunity_id );
+		$attempts = isset( $current['generation_attempts'] ) && is_array( $current['generation_attempts'] ) ? $current['generation_attempts'] : array();
+		$usage = isset( $attempt['usage'] ) && is_array( $attempt['usage'] ) ? $attempt['usage'] : array();
+		$attempts[] = array(
+			'analysis_id' => substr( sanitize_text_field( $analysis_id ), 0, 128 ),
+			'opportunity_id' => substr( sanitize_text_field( $opportunity_id ), 0, 128 ),
+			'timestamp' => gmdate( 'c' ),
+			'provider' => substr( sanitize_key( (string) ( $attempt['provider'] ?? '' ) ), 0, 64 ),
+			'model' => substr( sanitize_text_field( (string) ( $attempt['model'] ?? '' ) ), 0, 128 ),
+			'status' => in_array( (string) ( $attempt['status'] ?? '' ), array( 'provider_failed', 'validation_failed', 'draft_created' ), true ) ? (string) $attempt['status'] : 'provider_failed',
+			'usage' => array( 'input_tokens' => max( 0, (int) ( $usage['input_tokens'] ?? 0 ) ), 'output_tokens' => max( 0, (int) ( $usage['output_tokens'] ?? 0 ) ), 'total_tokens' => max( 0, (int) ( $usage['total_tokens'] ?? 0 ) ) ),
+			'diagnostics' => $this->sanitize_diagnostics( (array) ( $attempt['diagnostics'] ?? array() ) ),
+			'plugin_version' => substr( sanitize_text_field( defined( 'GLOBAL360_AI_VERSION' ) ? GLOBAL360_AI_VERSION : '' ), 0, 32 ),
+			'draft_post_id' => max( 0, (int) ( $attempt['draft_post_id'] ?? 0 ) ),
+		);
+		$current['generation_attempts'] = array_slice( $attempts, -20 );
+		$current['updated_at'] = gmdate( 'c' );
+		$records = $this->records(); $records[ $this->key( $analysis_id, $opportunity_id ) ] = $current;
+		update_option( self::OPTION, $records, false );
+	}
+
+	/** @return array<string,mixed> */
+	private function sanitize_diagnostics( array $diagnostics ): array {
+		$result = array(
+			'http_status' => max( 0, min( 599, (int) ( $diagnostics['http_status'] ?? 0 ) ) ),
+			'provider_error_type' => substr( sanitize_key( (string) ( $diagnostics['provider_error_type'] ?? '' ) ), 0, 64 ),
+			'provider_error_message' => substr( sanitize_text_field( (string) ( $diagnostics['provider_error_message'] ?? '' ) ), 0, 300 ),
+			'provider_request_id' => substr( preg_replace( '/[^A-Za-z0-9_-]/', '', (string) ( $diagnostics['provider_request_id'] ?? '' ) ), 0, 128 ),
+			'validation_field' => substr( sanitize_key( (string) ( $diagnostics['validation_field'] ?? '' ) ), 0, 64 ),
+			'validation_rule' => substr( sanitize_key( (string) ( $diagnostics['validation_rule'] ?? '' ) ), 0, 64 ),
+		);
+		foreach ( array( 'unsupported_tags' => 10, 'unsupported_attributes' => 20, 'unsafe_tags' => 10, 'unsafe_attributes' => 20 ) as $key => $limit ) {
+			$tokens = array(); foreach ( (array) ( $diagnostics[ $key ] ?? array() ) as $token ) { $token = substr( preg_replace( '/[^a-z0-9:_-]/', '', strtolower( (string) $token ) ), 0, 64 ); if ( '' !== $token ) { $tokens[] = $token; } }
+			$tokens = array_values( array_unique( $tokens ) ); sort( $tokens, SORT_STRING ); $result[ $key ] = array_slice( $tokens, 0, $limit );
+		}
+		return $result;
 	}
 
 	/** @return array<string,mixed> */

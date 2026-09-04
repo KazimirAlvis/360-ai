@@ -35,12 +35,12 @@ The `0.3.0-dev` line adds an explicitly human-controlled workflow: every stored 
 
 - Workflow state is stored separately from immutable analysis history and supports only validated transitions between pending, approved, rejected, and draft-created states.
 - OpenAI and Anthropic share one structured draft contract; Anthropic receives its established provider-safe schema transformation, while `MockProvider` supports deterministic local testing without paid requests.
-- Deterministic validation rejects unexpected fields or post types, unsafe HTML, active content, shortcodes, Markdown wrappers, invalid internal-link IDs, invalid title/slug correspondence, and content outside bounded lengths.
+- Deterministic validation accepts only attribute-free `p`, `h2`, `h3`, `ul`, `ol`, `li`, `strong`, and `em` markup. Links remain suggestions by validated post ID rather than provider-authored `<a>` elements. All other tags and all attributes—including classes, styles, IDs, event handlers, and provider URLs—remain fail-closed and reject the draft instead of being silently stripped.
 - A request-local generation context includes only the approved opportunity, relevant site context, explicitly referenced content links, and referenced Core entities/locations.
 - Duplicate lookup and an atomic short-lived generation lock prevent double-click or concurrent duplicate drafts and provider calls.
 - Draft provenance, token usage, SEO title/description suggestions, and validated internal-link suggestions use private `_global360_ai_*` metadata. This milestone deliberately does not write undocumented SEOPress fields or insert AI-created URLs.
 - Clinic, Doctor, relationship, and location records remain read-only inputs owned by Platform Core/API Sync. Generation writes only a new Page/Post draft and 360 AI metadata on that draft.
-- Provider and validation failures leave the opportunity approved, create no post, perform no automatic retry, and retain only bounded sanitized diagnostics.
+- Provider and validation failures leave the opportunity approved, create no post, perform no automatic retry, and retain only bounded sanitized diagnostics. A private, 20-entry-per-opportunity attempt history records provider/model, token usage, status, and structural validation names such as rejected tags or attributes, never prompts, context, generated prose, credentials, or raw responses.
 
 ## Architecture
 
