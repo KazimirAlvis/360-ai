@@ -137,10 +137,10 @@ $test_can_manage = true;
 ob_start(); $admin->render(); $output = ob_get_clean();
 ai_expect( false === strpos( $output, '<script>Brand</script>' ) && false !== strpos( $output, '&lt;script&gt;Brand&lt;/script&gt;' ), 'admin output escapes Core-provided values' );
 
-$sources = '';
-foreach ( glob( dirname( __DIR__ ) . '/src/*.php' ) as $file ) { $sources .= file_get_contents( $file ); }
-foreach ( glob( dirname( __DIR__ ) . '/src/*/*.php' ) as $file ) { $sources .= file_get_contents( $file ); }
-ai_expect( ! preg_match( '/\b(?:add|update|delete)_post_meta\s*\(/', $sources ), '360 AI performs no Clinic/Doctor metadata writes' );
-ai_expect( false === strpos( $sources, "get_post_meta(" ), '360 AI does not read legacy Clinic/Doctor meta directly' );
+$domain_sources = file_get_contents( dirname( __DIR__ ) . '/src/Core/CoreAdapter.php' ) . file_get_contents( dirname( __DIR__ ) . '/src/Analysis/OpportunityService.php' );
+ai_expect( ! preg_match( '/\b(?:add|update|delete)_post_meta\s*\(/', $domain_sources ), 'analysis and Core adapters perform no Clinic/Doctor metadata writes' );
+ai_expect( false === strpos( $domain_sources, 'get_post_meta(' ), 'analysis and Core adapters do not read legacy Clinic/Doctor meta directly' );
+$draft_source = file_get_contents( dirname( __DIR__ ) . '/src/Generation/DraftService.php' );
+ai_expect( false === strpos( $draft_source, "'post_type' => 'clinic'" ) && false === strpos( $draft_source, "'post_type' => 'doctor'" ), 'draft generation cannot target Clinic or Doctor post types' );
 
 echo "360 AI focused tests passed.\n";

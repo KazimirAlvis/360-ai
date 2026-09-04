@@ -4,7 +4,7 @@ namespace Global360\AI\AI;
 
 use Global360\AI\Settings\ApiKeyManager;
 
-final class ProviderFactory {
+class ProviderFactory {
 	private $keys;
 
 	public function __construct( ApiKeyManager $keys ) { $this->keys = $keys; }

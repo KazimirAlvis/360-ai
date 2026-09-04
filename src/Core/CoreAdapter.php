@@ -169,6 +169,28 @@ final class CoreAdapter {
 		);
 	}
 
+	/** @return array<string,mixed> */
+	public function generation_entities( array $clinic_ids, array $doctor_ids, array $location_ids ): array {
+		$platform = $this->platform();
+		if ( null === $platform ) { return array( 'clinics' => array(), 'doctors' => array(), 'locations' => array() ); }
+		$allowed = $this->analysis_entities();
+		$allowed_clinics = array_map( 'absint', (array) $allowed['clinic_ids'] );
+		$allowed_doctors = array_map( 'absint', (array) $allowed['doctor_ids'] );
+		$allowed_locations = array();
+		foreach ( (array) $allowed['locations'] as $location ) { if ( is_array( $location ) ) { $allowed_locations[ (string) ( $location['id'] ?? '' ) ] = $location; } }
+		$result = array( 'clinics' => array(), 'doctors' => array(), 'locations' => array() );
+		foreach ( array_values( array_unique( array_map( 'absint', $clinic_ids ) ) ) as $id ) {
+			if ( in_array( $id, $allowed_clinics, true ) ) { $entity = $platform->clinics()->get( $id ); if ( is_array( $entity ) ) { $result['clinics'][] = $entity; } }
+		}
+		foreach ( array_values( array_unique( array_map( 'absint', $doctor_ids ) ) ) as $id ) {
+			if ( in_array( $id, $allowed_doctors, true ) ) { $entity = $platform->doctors()->get( $id ); if ( is_array( $entity ) ) { $result['doctors'][] = $entity; } }
+		}
+		foreach ( array_values( array_unique( array_map( 'sanitize_text_field', $location_ids ) ) ) as $id ) {
+			if ( isset( $allowed_locations[ $id ] ) ) { $result['locations'][] = $allowed_locations[ $id ]; }
+		}
+		return $result;
+	}
+
 	/** @return object|null */
 	private function platform() {
 		if ( $this->resolved ) {

@@ -3,23 +3,31 @@
 namespace Global360\AI\Admin;
 
 use Global360\AI\Analysis\OpportunityService;
+use Global360\AI\Generation\DraftService;
 use Global360\AI\Settings\ApiKeyManager;
+use Global360\AI\Security\WorkflowRequestGuard;
 use Global360\AI\Storage\AnalysisRepository;
+use Global360\AI\Storage\WorkflowRepository;
 
 final class ContentOpportunitiesPage {
 	private const SLUG = '360-ai-opportunities';
 	private $service;
 	private $repository;
 	private $keys;
+	private $workflow;
+	private $drafts;
+	private $guard;
 
-	public function __construct( OpportunityService $service, AnalysisRepository $repository, ApiKeyManager $keys ) {
-		$this->service = $service; $this->repository = $repository; $this->keys = $keys;
+	public function __construct( OpportunityService $service, AnalysisRepository $repository, ApiKeyManager $keys, WorkflowRepository $workflow = null, DraftService $drafts = null, WorkflowRequestGuard $guard = null ) {
+		$this->service = $service; $this->repository = $repository; $this->keys = $keys; $this->workflow = $workflow; $this->drafts = $drafts; $this->guard = $guard ?: new WorkflowRequestGuard();
 	}
 
 	public function register_hooks(): void {
 		add_action( 'admin_menu', array( $this, 'register_menu' ) );
 		add_action( 'admin_post_global360_ai_analyze', array( $this, 'handle_analyze' ) );
 		add_action( 'admin_post_global360_ai_save_provider', array( $this, 'handle_save_provider' ) );
+		add_action( 'admin_post_global360_ai_opportunity_workflow', array( $this, 'handle_workflow' ) );
+		add_action( 'admin_post_global360_ai_generate_draft', array( $this, 'handle_generate_draft' ) );
 	}
 
 	public function register_menu(): void {
@@ -44,12 +52,32 @@ final class ContentOpportunitiesPage {
 		$this->redirect( 'settings_saved' );
 	}
 
+	public function handle_workflow(): void {
+		$analysis_id = sanitize_text_field( (string) ( $_POST['analysis_id'] ?? '' ) );
+		$opportunity_id = sanitize_key( (string) ( $_POST['opportunity_id'] ?? '' ) );
+		$this->guard->assert( 'global360_ai_workflow_' . $analysis_id . '_' . $opportunity_id, $analysis_id, $opportunity_id, sanitize_text_field( (string) ( $_POST['_wpnonce'] ?? '' ) ) );
+		$intents = array( 'approve' => 'approved', 'reject' => 'rejected', 'restore' => 'pending' );
+		$intent = sanitize_key( (string) ( $_POST['workflow_action'] ?? '' ) );
+		if ( ! isset( $intents[ $intent ] ) || ! $this->workflow ) { $this->redirect( 'workflow_failed', 'Invalid workflow action.' ); }
+		try { $this->workflow->transition( $analysis_id, $opportunity_id, $intents[ $intent ] ); $this->redirect( 'workflow_updated' ); }
+		catch ( \Throwable $error ) { $this->redirect( 'workflow_failed', 'Workflow update failed.' ); }
+	}
+
+	public function handle_generate_draft(): void {
+		$analysis_id = sanitize_text_field( (string) ( $_POST['analysis_id'] ?? '' ) );
+		$opportunity_id = sanitize_key( (string) ( $_POST['opportunity_id'] ?? '' ) );
+		$this->guard->assert( 'global360_ai_generate_' . $analysis_id . '_' . $opportunity_id, $analysis_id, $opportunity_id, sanitize_text_field( (string) ( $_POST['_wpnonce'] ?? '' ) ) );
+		if ( ! $this->drafts ) { $this->redirect( 'draft_failed', 'Draft generation is unavailable.' ); }
+		try { $post_id = $this->drafts->generate( $analysis_id, $opportunity_id, get_current_user_id() ); $this->redirect( 'draft_created', '', $post_id ); }
+		catch ( \Throwable $error ) { $this->redirect( 'draft_failed', 'Draft generation failed. The opportunity remains approved.' ); }
+	}
+
 	public function render(): void {
 		if ( ! current_user_can( AdminPage::CAPABILITY ) ) { wp_die( esc_html__( 'You do not have permission to access 360 AI.', '360-ai' ) ); }
 		$latest = $this->repository->latest();
 		?>
 		<div class="wrap"><h1><?php echo esc_html__( 'Content Opportunities', '360-ai' ); ?></h1>
-		<p><?php echo esc_html__( 'Analyze published site context and receive exactly five human-review recommendations. This tool never creates content.', '360-ai' ); ?></p>
+		<p><?php echo esc_html__( 'Analyze published site context, review each recommendation, and generate a WordPress draft only after explicit approval. Generated drafts are never published automatically.', '360-ai' ); ?></p>
 		<?php $this->notice(); ?>
 		<h2><?php echo esc_html__( 'Provider Configuration', '360-ai' ); ?></h2>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
@@ -71,12 +99,13 @@ final class ContentOpportunitiesPage {
 			<h2><?php echo esc_html__( 'Latest Analysis', '360-ai' ); ?></h2>
 			<p><?php echo esc_html( sprintf( __( 'Provider: %1$s · Model: %2$s · Context: %3$s', '360-ai' ), (string) $latest['provider'], (string) $latest['model'], substr( (string) $latest['context_hash'], 0, 12 ) ) ); ?></p>
 			<div class="global360-ai-opportunities">
-			<?php foreach ( (array) ( $latest['opportunities'] ?? array() ) as $item ) : ?>
+			<?php foreach ( (array) ( $latest['opportunities'] ?? array() ) as $item ) : $state = $this->workflow ? $this->workflow->get( (string) $latest['analysis_id'], (string) $item['id'] ) : array( 'status' => 'pending', 'draft_post_id' => 0 ); ?>
 				<div class="card"><h3><?php echo esc_html( (string) $item['proposed_title'] ); ?></h3>
 				<p><strong><?php echo esc_html( strtoupper( (string) $item['content_type'] ) . ' · ' . (string) $item['category'] . ' · ' . (string) $item['search_intent'] ); ?></strong></p>
 				<p><?php echo esc_html( (string) $item['rationale'] ); ?></p>
 				<p><?php echo esc_html( sprintf( __( 'Audience: %1$s · GEO: %2$s · Priority: %3$d · Confidence: %4$s', '360-ai' ), (string) $item['audience'], (string) $item['geo_scope'], (int) $item['priority'], (string) $item['confidence'] ) ); ?></p>
 				<p><?php echo esc_html( sprintf( __( 'Locations: %1$s · Clinics: %2$s · Doctors: %3$s · Internal links: %4$s', '360-ai' ), implode( ', ', $item['relevant_location_ids'] ), implode( ', ', $item['relevant_clinic_ids'] ), implode( ', ', $item['relevant_doctor_ids'] ), implode( ', ', $item['suggested_internal_link_ids'] ) ) ); ?></p>
+				<?php $this->workflow_controls( (string) $latest['analysis_id'], (string) $item['id'], $state ); ?>
 				</div>
 			<?php endforeach; ?></div>
 		<?php endif; ?></div>
@@ -88,8 +117,8 @@ final class ContentOpportunitiesPage {
 		check_admin_referer( $action );
 	}
 
-	private function redirect( string $status, string $error = '' ): void {
-		$url = add_query_arg( array_filter( array( 'page' => self::SLUG, 'global360_ai_status' => $status, 'global360_ai_error' => $error ) ), admin_url( 'admin.php' ) );
+	private function redirect( string $status, string $error = '', int $post_id = 0 ): void {
+		$url = add_query_arg( array_filter( array( 'page' => self::SLUG, 'global360_ai_status' => $status, 'global360_ai_error' => $error, 'global360_ai_post_id' => $post_id ) ), admin_url( 'admin.php' ) );
 		wp_safe_redirect( $url ); exit;
 	}
 
@@ -112,10 +141,36 @@ final class ContentOpportunitiesPage {
 		<?php
 	}
 
+	private function workflow_controls( string $analysis_id, string $opportunity_id, array $state ): void {
+		$status = (string) ( $state['status'] ?? 'pending' );
+		if ( 'draft_created' === $status ) {
+			$link = get_edit_post_link( (int) ( $state['draft_post_id'] ?? 0 ), '' );
+			echo '<p><strong>' . esc_html__( 'Draft Created', '360-ai' ) . '</strong> ';
+			if ( $link ) { echo '<a class="button button-primary" href="' . esc_url( $link ) . '">' . esc_html__( 'Edit Draft', '360-ai' ) . '</a>'; }
+			echo '</p>'; return;
+		}
+		echo '<p><strong>' . esc_html( ucfirst( $status ) ) . '</strong></p>';
+		if ( 'approved' === $status ) { $this->action_form( 'global360_ai_generate_draft', $analysis_id, $opportunity_id, '', __( 'Generate Draft', '360-ai' ), 'global360_ai_generate_' ); $this->action_form( 'global360_ai_opportunity_workflow', $analysis_id, $opportunity_id, 'restore', __( 'Return to Pending', '360-ai' ) ); return; }
+		if ( 'rejected' === $status ) { $this->action_form( 'global360_ai_opportunity_workflow', $analysis_id, $opportunity_id, 'restore', __( 'Restore to Pending', '360-ai' ) ); return; }
+		$this->action_form( 'global360_ai_opportunity_workflow', $analysis_id, $opportunity_id, 'approve', __( 'Approve', '360-ai' ) );
+		$this->action_form( 'global360_ai_opportunity_workflow', $analysis_id, $opportunity_id, 'reject', __( 'Reject', '360-ai' ) );
+	}
+
+	private function action_form( string $action, string $analysis_id, string $opportunity_id, string $intent, string $label, string $nonce_prefix = 'global360_ai_workflow_' ): void {
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="display:inline-block;margin-right:6px">';
+		echo '<input type="hidden" name="action" value="' . esc_attr( $action ) . '"><input type="hidden" name="analysis_id" value="' . esc_attr( $analysis_id ) . '"><input type="hidden" name="opportunity_id" value="' . esc_attr( $opportunity_id ) . '">';
+		if ( '' !== $intent ) { echo '<input type="hidden" name="workflow_action" value="' . esc_attr( $intent ) . '">'; }
+		wp_nonce_field( $nonce_prefix . $analysis_id . '_' . $opportunity_id );
+		submit_button( $label, 'secondary', 'submit', false ); echo '</form>';
+	}
+
 	private function notice(): void {
 		$status = sanitize_key( (string) ( $_GET['global360_ai_status'] ?? '' ) );
 		if ( 'analysis_complete' === $status ) { echo '<div class="notice notice-success"><p>' . esc_html__( 'Analysis completed and five validated opportunities were saved.', '360-ai' ) . '</p></div>'; }
 		if ( 'settings_saved' === $status ) { echo '<div class="notice notice-success"><p>' . esc_html__( 'Provider settings saved.', '360-ai' ) . '</p></div>'; }
 		if ( 'analysis_failed' === $status ) { echo '<div class="notice notice-error"><p>' . esc_html( (string) ( $_GET['global360_ai_error'] ?? __( 'Analysis failed.', '360-ai' ) ) ) . '</p></div>'; }
+		if ( 'workflow_updated' === $status ) { echo '<div class="notice notice-success"><p>' . esc_html__( 'Opportunity workflow updated.', '360-ai' ) . '</p></div>'; }
+		if ( 'workflow_failed' === $status || 'draft_failed' === $status ) { echo '<div class="notice notice-error"><p>' . esc_html( (string) ( $_GET['global360_ai_error'] ?? __( 'Workflow action failed.', '360-ai' ) ) ) . '</p></div>'; }
+		if ( 'draft_created' === $status ) { echo '<div class="notice notice-success"><p>' . esc_html__( 'Draft created for human editorial review. It was not published.', '360-ai' ) . '</p></div>'; }
 	}
 }

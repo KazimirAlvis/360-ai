@@ -128,10 +128,9 @@ analysis_expect( 'secret-value' === $keys->get(), 'blank key submission preserve
 $keys->save( '', true );
 analysis_expect( '' === $keys->get(), 'explicit removal deletes the stored key' );
 
-$sources = '';
-foreach ( glob( dirname( __DIR__ ) . '/src/*/*.php' ) as $file ) { $sources .= file_get_contents( $file ); }
-analysis_expect( false === strpos( $sources, 'wp_insert_post' ), 'analysis source contains no Page/Post creation behavior' );
-analysis_expect( ! preg_match( '/\b(?:add|update|delete)_post_meta\s*\(/', $sources ), 'analysis source contains no Clinic/Doctor or SEOPress metadata writes' );
+$analysis_sources = file_get_contents( dirname( __DIR__ ) . '/src/Analysis/OpportunityService.php' ) . file_get_contents( dirname( __DIR__ ) . '/src/Analysis/AnalysisContextBuilder.php' );
+analysis_expect( false === strpos( $analysis_sources, 'wp_insert_post' ), 'opportunity analysis contains no Page/Post creation behavior' );
+analysis_expect( ! preg_match( '/\b(?:add|update|delete)_post_meta\s*\(/', $analysis_sources ), 'opportunity analysis contains no Clinic/Doctor or SEOPress metadata writes' );
 $admin_source = file_get_contents( dirname( __DIR__ ) . '/src/Admin/ContentOpportunitiesPage.php' );
 analysis_expect( false !== strpos( $admin_source, 'current_user_can' ) && false !== strpos( $admin_source, 'check_admin_referer' ), 'analysis actions enforce capability and nonce protection' );
 

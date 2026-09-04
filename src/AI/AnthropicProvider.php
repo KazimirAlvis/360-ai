@@ -2,10 +2,13 @@
 
 namespace Global360\AI\AI;
 
+use Global360\AI\Generation\DraftRequest;
+use Global360\AI\Generation\DraftResponse;
+
 final class AnthropicProvider implements ProviderInterface {
 	private const ENDPOINT = 'https://api.anthropic.com/v1/messages';
 	private const API_VERSION = '2023-06-01';
-	private const UNSUPPORTED_SCHEMA_KEYWORDS = array( 'minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'minItems', 'maxItems' );
+	private const UNSUPPORTED_SCHEMA_KEYWORDS = array( 'minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'minItems', 'maxItems', 'minLength', 'maxLength' );
 	private $api_key;
 	private $model;
 
@@ -76,10 +79,37 @@ final class AnthropicProvider implements ProviderInterface {
 		);
 	}
 
+	public function generate_draft( array $context ): DraftResponse {
+		if ( ! $this->is_configured() ) { return DraftResponse::failure( $this->name(), $this->model(), 'Anthropic is selected but no Anthropic API key is configured.' ); }
+		$response = wp_remote_post( self::ENDPOINT, array(
+			'timeout' => 60,
+			'headers' => array( 'x-api-key' => $this->api_key, 'anthropic-version' => self::API_VERSION, 'content-type' => 'application/json' ),
+			'body' => wp_json_encode( array(
+				'model' => $this->model(), 'max_tokens' => 8192, 'system' => DraftRequest::instructions(),
+				'messages' => array( array( 'role' => 'user', 'content' => wp_json_encode( $context ) ) ),
+				'output_config' => array( 'format' => array( 'type' => 'json_schema', 'schema' => self::draft_schema() ) ),
+			) ),
+		) );
+		if ( is_wp_error( $response ) ) { return DraftResponse::failure( $this->name(), $this->model(), 'The Anthropic draft request failed.' ); }
+		$status = wp_remote_retrieve_response_code( $response );
+		$body = json_decode( wp_remote_retrieve_body( $response ), true );
+		if ( 200 > $status || 300 <= $status ) { return DraftResponse::failure( $this->name(), $this->model(), 'Anthropic draft request failed.', $this->error_diagnostics( $response, $body, $status ) ); }
+		if ( ! is_array( $body ) ) { return DraftResponse::failure( $this->name(), $this->model(), 'Anthropic returned invalid draft output.' ); }
+		$text = '';
+		foreach ( (array) ( $body['content'] ?? array() ) as $part ) { if ( 'text' === ( $part['type'] ?? '' ) ) { $text = (string) ( $part['text'] ?? '' ); break; } }
+		$data = json_decode( $text, true );
+		if ( ! is_array( $data ) ) { return DraftResponse::failure( $this->name(), (string) ( $body['model'] ?? $this->model() ), 'Anthropic returned invalid draft output.' ); }
+		$usage = (array) ( $body['usage'] ?? array() ); $input = (int) ( $usage['input_tokens'] ?? 0 ); $output = (int) ( $usage['output_tokens'] ?? 0 );
+		return new DraftResponse( $data, $this->name(), (string) ( $body['model'] ?? $this->model() ), array( 'input_tokens' => $input, 'output_tokens' => $output, 'total_tokens' => $input + $output ) );
+	}
+
 	/** @return array<string,mixed> */
 	public static function schema(): array {
 		return self::sanitize_schema( OpportunityRequest::schema() );
 	}
+
+	/** @return array<string,mixed> */
+	public static function draft_schema(): array { return self::sanitize_schema( DraftRequest::schema() ); }
 
 	/** @param mixed $value @return mixed */
 	private static function sanitize_schema( $value ) {

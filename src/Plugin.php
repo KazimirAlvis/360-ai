@@ -12,8 +12,13 @@ use Global360\AI\Context\AnalysisContentReader;
 use Global360\AI\Context\ContentInventory;
 use Global360\AI\Context\SiteContextBuilder;
 use Global360\AI\Core\CoreAdapter;
+use Global360\AI\Generation\DraftGenerationContextBuilder;
+use Global360\AI\Generation\DraftService;
+use Global360\AI\Generation\DraftValidator;
+use Global360\AI\Generation\GenerationLock;
 use Global360\AI\Settings\ApiKeyManager;
 use Global360\AI\Storage\AnalysisRepository;
+use Global360\AI\Storage\WorkflowRepository;
 
 final class Plugin {
 	/** @var self|null */
@@ -51,7 +56,9 @@ final class Plugin {
 			new OpportunityValidator(),
 			$repository
 		);
-		$opportunities = new ContentOpportunitiesPage( $service, $repository, $key_manager );
+		$workflow      = new WorkflowRepository( $repository );
+		$drafts        = new DraftService( $workflow, new DraftGenerationContextBuilder( $analysis, $adapter ), new ProviderFactory( $key_manager ), new DraftValidator(), new GenerationLock() );
+		$opportunities = new ContentOpportunitiesPage( $service, $repository, $key_manager, $workflow, $drafts );
 		$opportunities->register_hooks();
 	}
 }

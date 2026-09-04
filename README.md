@@ -2,7 +2,7 @@
 
 360 AI is the general AI layer for the 360 platform. It is **not** an SEO-only plugin. SEO and GEO/AEO will be modules alongside future content, auditing, internal-linking, image, Search Console, and analytics-assisted workflows.
 
-## Current release: 0.2.0
+## Current development version: 0.3.0-dev
 
 The foundation release provides:
 
@@ -29,6 +29,19 @@ Version 0.2.0 adds **Content Opportunities**, a human-review workflow that build
 
 Draft generation is deliberately not part of 0.2.0. No public endpoint, Clinic/Doctor write, or SEOPress write exists.
 
+## Draft-generation development
+
+The `0.3.0-dev` line adds an explicitly human-controlled workflow: every stored opportunity begins pending, an administrator may approve or reject it, and only an approved opportunity can invoke draft generation. Generated content is always inserted as a WordPress draft for editorial review and is never published automatically.
+
+- Workflow state is stored separately from immutable analysis history and supports only validated transitions between pending, approved, rejected, and draft-created states.
+- OpenAI and Anthropic share one structured draft contract; Anthropic receives its established provider-safe schema transformation, while `MockProvider` supports deterministic local testing without paid requests.
+- Deterministic validation rejects unexpected fields or post types, unsafe HTML, active content, shortcodes, Markdown wrappers, invalid internal-link IDs, invalid title/slug correspondence, and content outside bounded lengths.
+- A request-local generation context includes only the approved opportunity, relevant site context, explicitly referenced content links, and referenced Core entities/locations.
+- Duplicate lookup and an atomic short-lived generation lock prevent double-click or concurrent duplicate drafts and provider calls.
+- Draft provenance, token usage, SEO title/description suggestions, and validated internal-link suggestions use private `_global360_ai_*` metadata. This milestone deliberately does not write undocumented SEOPress fields or insert AI-created URLs.
+- Clinic, Doctor, relationship, and location records remain read-only inputs owned by Platform Core/API Sync. Generation writes only a new Page/Post draft and 360 AI metadata on that draft.
+- Provider and validation failures leave the opportunity approved, create no post, perform no automatic retry, and retain only bounded sanitized diagnostics.
+
 ## Architecture
 
 - `CoreAdapter` is the only 360 domain-data integration boundary and never reimplements Core legacy-meta interpretation.
@@ -50,6 +63,7 @@ Run focused tests with:
 php tests/run.php
 php tests/analysis.php
 php tests/anthropic.php
+php tests/draft-generation.php
 ```
 
-Run `tests/local-integration.php` only against a local development WordPress installation.
+Run `tests/local-integration.php`, `tests/local-analysis.php`, and `tests/local-draft-generation.php` only against a local development WordPress installation. The draft-generation harness creates and removes a disposable draft and restores its test workflow/history state.
