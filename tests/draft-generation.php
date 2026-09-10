@@ -129,5 +129,11 @@ $bounded = $workflow->get( $analysis_id, 'one' )['generation_diagnostics'];
 draft_expect( 10 === count( $bounded['unsupported_tags'] ) && 20 === count( $bounded['unsupported_attributes'] ), 'stored structural diagnostics enforce tag and attribute count bounds' );
 draft_expect( false === strpos( serialize( $bounded ), '<private>' ), 'stored structural diagnostics retain only normalized name characters' );
 draft_expect( 10 === DraftRequest::schema()['properties']['suggested_internal_link_ids']['maxItems'], 'canonical draft schema retains internal-link limit' );
+$instructions = DraftRequest::instructions();
+draft_expect( false !== strpos( $instructions, 'only <p>, <h2>, <h3>, <ul>, <ol>, <li>, <strong>, and <em>' ), 'canonical generation instructions state the exact HTML tag allowlist' );
+draft_expect( false !== strpos( $instructions, 'attribute-free HTML' ) && false !== strpos( $instructions, 'Do not use any other HTML tags or attributes' ), 'canonical generation instructions prohibit HTML attributes' );
+draft_expect( false !== strpos( $instructions, 'Do not insert hyperlinks or <a> tags into the generated content.' ), 'canonical generation instructions explicitly prohibit anchors and hyperlinks' );
+draft_expect( false !== strpos( $instructions, 'href' ) && false !== strpos( $instructions, 'links, or URLs in content' ), 'canonical generation instructions prohibit href values, links, and URLs in content' );
+draft_expect( false !== strpos( $instructions, 'only through suggested_internal_link_ids' ) && false !== strpos( $instructions, 'only IDs supplied in allowed_internal_links' ), 'canonical generation instructions isolate internal-link recommendations to approved IDs' );
 
 echo "360 AI draft workflow and validator tests passed.\n";

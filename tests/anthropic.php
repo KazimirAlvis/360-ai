@@ -123,6 +123,7 @@ anthropic_expect( $draft_result->is_success() && $draft_fixture === $draft_resul
 anthropic_expect( 50 === $draft_result->usage['total_tokens'], 'Anthropic draft token usage is preserved' );
 $draft_body = json_decode( $anthropic_request['args']['body'], true );
 anthropic_expect( 'json_schema' === $draft_body['output_config']['format']['type'], 'Anthropic draft request uses structured output' );
+anthropic_expect( \Global360\AI\Generation\DraftRequest::instructions() === $draft_body['system'], 'Anthropic draft request uses the canonical generation instructions' );
 foreach ( array( 'minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'minItems', 'maxItems', 'minLength', 'maxLength' ) as $keyword ) { anthropic_expect( ! anthropic_schema_has_keyword( $draft_body['output_config']['format']['schema'], $keyword ), 'Anthropic draft schema removes unsupported ' . $keyword ); }
 anthropic_expect( 10 === \Global360\AI\Generation\DraftRequest::schema()['properties']['suggested_internal_link_ids']['maxItems'], 'canonical draft schema remains strict for OpenAI' );
 $anthropic_http_response = anthropic_response( 200, array( 'content' => array( array( 'type' => 'text', 'text' => '{bad' ) ) ) );
@@ -137,6 +138,7 @@ $openai_draft = $openai->generate_draft( array( 'bounded' => 'context' ) );
 anthropic_expect( $openai_draft->is_success() && $draft_fixture === $openai_draft->draft && 33 === $openai_draft->usage['total_tokens'], 'OpenAI draft response normalizes into the same DraftResponse' );
 $openai_body = json_decode( $anthropic_request['args']['body'], true );
 anthropic_expect( true === $openai_body['text']['format']['strict'] && 10 === $openai_body['text']['format']['schema']['properties']['suggested_internal_link_ids']['maxItems'], 'OpenAI draft request retains canonical strict schema' );
+anthropic_expect( \Global360\AI\Generation\DraftRequest::instructions() === $openai_body['instructions'], 'OpenAI draft request uses the canonical generation instructions' );
 $anthropic_http_response = anthropic_response( 400, array( 'error' => array( 'type' => 'invalid_request_error', 'message' => 'Safe validation message.' ), 'request_id' => 'req_openai' ) );
 $openai_failure = $openai->generate_draft( array( 'secret_context' => 'not-stored' ) );
 anthropic_expect( 400 === $openai_failure->diagnostics['http_status'] && 'invalid_request_error' === $openai_failure->diagnostics['provider_error_type'] && ! isset( $openai_failure->diagnostics['headers'] ), 'OpenAI draft HTTP diagnostics are structured without secret leakage' );
