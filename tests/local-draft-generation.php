@@ -90,6 +90,8 @@ try {
 	local_draft_expect( false !== strpos( $pending_html, 'Approve' ) && false !== strpos( $pending_html, 'Reject' ), 'pending admin workflow controls render' );
 
 	$workflow->transition( $analysis_id, 'draft-e2e-one', 'approved' );
+	$workflow->record_failure( $analysis_id, 'draft-e2e-one', 'Prior fixture failure.', array( 'validation_field' => 'content', 'validation_rule' => 'incomplete_content', 'completion_status' => 'incomplete', 'stop_reason' => 'max_tokens', 'output_limit_reached' => true ) );
+	$workflow->record_generation_attempt( $analysis_id, 'draft-e2e-one', array( 'provider' => 'fixture-prior', 'model' => 'fixture', 'status' => 'validation_failed', 'usage' => array( 'input_tokens' => 10, 'output_tokens' => 20, 'total_tokens' => 30 ), 'diagnostics' => array( 'validation_field' => 'content', 'validation_rule' => 'incomplete_content', 'completion_status' => 'incomplete', 'stop_reason' => 'max_tokens', 'output_limit_reached' => true ) ) );
 	$post_id = $drafts->generate( $analysis_id, 'draft-e2e-one', (int) $admins[0] ); $created[] = $post_id;
 	$post = get_post( $post_id );
 	local_draft_expect( 1 === MockProvider::$draft_calls, 'only approved opportunity reaches provider' );
@@ -97,7 +99,11 @@ try {
 	local_draft_expect( 'Mock Draft Generation Safety Review' === $post->post_title && 'mock-draft-generation-safety-review' === $post->post_name && '' !== $post->post_excerpt && '' !== $post->post_content, 'validated title, slug, excerpt, and content are written' );
 	foreach ( array( '_global360_ai_analysis_id', '_global360_ai_opportunity_id', '_global360_ai_provider', '_global360_ai_model', '_global360_ai_generated_at', '_global360_ai_plugin_version', '_global360_ai_seo_title', '_global360_ai_meta_description', '_global360_ai_suggested_internal_link_ids' ) as $key ) { local_draft_expect( metadata_exists( 'post', $post_id, $key ), 'draft provenance contains ' . $key ); }
 	local_draft_expect( ! metadata_exists( 'post', $post_id, '_seopress_titles_title' ) && ! metadata_exists( 'post', $post_id, '_seopress_titles_desc' ), 'generated SEO suggestions remain in private AI metadata' );
-	local_draft_expect( 'draft_created' === $workflow->get( $analysis_id, 'draft-e2e-one' )['status'], 'workflow transitions to draft_created with post relationship' );
+	$created_state = $workflow->get( $analysis_id, 'draft-e2e-one' );
+	local_draft_expect( 'draft_created' === $created_state['status'], 'workflow transitions to draft_created with post relationship' );
+	local_draft_expect( ! isset( $created_state['generation_error'], $created_state['generation_diagnostics'] ), 'successful generation clears stale top-level failure state' );
+	$created_attempts = $created_state['generation_attempts']; $latest_created_attempt = end( $created_attempts );
+	local_draft_expect( 'validation_failed' === $created_attempts[0]['status'] && 'draft_created' === $latest_created_attempt['status'], 'successful generation preserves prior failure history and appends success history' );
 	$again = $drafts->generate( $analysis_id, 'draft-e2e-one', (int) $admins[0] );
 	local_draft_expect( $post_id === $again && 1 === MockProvider::$draft_calls, 'existing draft prevents a second provider call and duplicate post' );
 

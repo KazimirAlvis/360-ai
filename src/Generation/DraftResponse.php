@@ -9,14 +9,16 @@ final class DraftResponse {
 	public $usage;
 	public $error;
 	public $diagnostics;
+	public $completion;
 
-	public function __construct( array $draft, string $provider, string $model, array $usage = array(), string $error = '', array $diagnostics = array() ) {
+	public function __construct( array $draft, string $provider, string $model, array $usage = array(), string $error = '', array $diagnostics = array(), array $completion = array() ) {
 		$this->draft = $draft;
 		$this->provider = $provider;
 		$this->model = $model;
 		$this->usage = $usage;
 		$this->error = $error;
 		$this->diagnostics = $diagnostics;
+		$this->completion = $completion;
 	}
 
 	public function is_success(): bool { return '' === $this->error; }

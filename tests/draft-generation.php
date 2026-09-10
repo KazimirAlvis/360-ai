@@ -94,8 +94,27 @@ $valid = array(
 );
 $validator = new DraftValidator();
 draft_expect( $valid['slug'] === $validator->validate( $valid, $opportunity, $context )['slug'], 'valid semantic HTML draft is accepted' );
-$semantic = $valid; $semantic['content'] = '<p>' . str_repeat( 'Educational information for review. ', 7 ) . '</p><h2>Heading</h2><h3>Subheading</h3><ul><li><strong>Strong</strong></li></ul><ol><li><em>Emphasis</em></li></ol>';
+$semantic = $valid; $semantic['content'] = '<p>' . str_repeat( 'Educational information for review. ', 7 ) . '</p><h2>Heading</h2><h3>Subheading</h3><ul><li><strong>Strong</strong></li></ul><ol><li><em>Emphasis.</em></li></ol>';
 draft_expect( $semantic['content'] === $validator->validate( $semantic, $opportunity, $context )['content'], 'exact semantic allowlist passes without sanitization' );
+$incomplete = $valid; $incomplete['content'] = '<p>' . str_repeat( 'Educational information for careful human review. ', 8 ) . 'Some individuals report numbness, tingling, or a</p>';
+$incomplete_diagnostics = draft_validation_diagnostics( static function () use ( $validator, $incomplete, $opportunity, $context ) { $validator->validate( $incomplete, $opportunity, $context, array( 'completion_status' => 'completed', 'stop_reason' => 'end_turn' ) ); } );
+draft_expect( 'incomplete_content' === $incomplete_diagnostics['validation_rule'] && 'end_turn' === $incomplete_diagnostics['stop_reason'], 'mid-sentence provider output is rejected even after a normal provider stop' );
+foreach ( array( '?', '!', '.&rdquo;', '.&quot;', '.)' ) as $ending ) {
+	$item = $valid; $item['content'] = '<p>' . str_repeat( 'Educational information for careful human review. ', 8 ) . 'Is this complete' . $ending . '</p>';
+	draft_expect( $item['slug'] === $validator->validate( $item, $opportunity, $context )['slug'], 'complete terminal punctuation is accepted: ' . $ending );
+}
+$limited_diagnostics = draft_validation_diagnostics( static function () use ( $validator, $valid, $opportunity, $context ) { $validator->validate( $valid, $opportunity, $context, array( 'completion_status' => 'incomplete', 'stop_reason' => 'max_tokens', 'output_limit_reached' => true ) ); } );
+draft_expect( 'incomplete_content' === $limited_diagnostics['validation_rule'] && true === $limited_diagnostics['output_limit_reached'], 'provider output-limit completion is rejected deterministically' );
+$page_opportunity = draft_opportunity( 'page', 'page' );
+$page_draft = $valid; $page_draft['title'] = $page_opportunity['proposed_title']; $page_draft['slug'] = $page_opportunity['suggested_slug']; $page_draft['seo_title'] = $page_opportunity['proposed_title'];
+$short_page_diagnostics = draft_validation_diagnostics( static function () use ( $validator, $page_draft, $page_opportunity, $context ) { $validator->validate( $page_draft, $page_opportunity, $context ); } );
+draft_expect( 'minimum_content' === $short_page_diagnostics['validation_rule'], 'short Page output is rejected as insufficiently complete' );
+$page_draft['content'] = '<p>' . str_repeat( 'Useful educational context supports careful questions and qualified human review. ', 50 ) . 'This complete draft requires editorial review.</p>';
+draft_expect( $page_draft['slug'] === $validator->validate( $page_draft, $page_opportunity, $context )['slug'], 'substantive Page output meeting the minimum is accepted' );
+$encoded = $valid; $encoded['title'] = 'Approved Educational Topic One u0026 Two'; $encoded['seo_title'] = 'Signs u0026 Symptoms'; $encoded['excerpt'] = 'Care \\u0026 review.'; $encoded['meta_description'] = 'Questions &amp; answers.';
+$encoded_opportunity = $opportunity; $encoded_opportunity['proposed_title'] = 'Approved Educational Topic One & Two';
+$normalized = $validator->validate( $encoded, $encoded_opportunity, $context );
+draft_expect( 'Approved Educational Topic One & Two' === $normalized['title'] && 'Signs & Symptoms' === $normalized['seo_title'] && 'Care & review.' === $normalized['excerpt'] && 'Questions &amp; answers.' === $normalized['meta_description'], 'narrow malformed u0026 text is normalized without double-decoding valid ampersands or entities' );
 foreach ( array( 'title', 'slug', 'excerpt', 'content' ) as $field ) {
 	draft_rejects( static function () use ( $validator, $valid, $opportunity, $context, $field ) { $item = $valid; $item[ $field ] = ''; $validator->validate( $item, $opportunity, $context ); }, 'empty ' . $field . ' is rejected' );
 }
@@ -135,5 +154,6 @@ draft_expect( false !== strpos( $instructions, 'attribute-free HTML' ) && false 
 draft_expect( false !== strpos( $instructions, 'Do not insert hyperlinks or <a> tags into the generated content.' ), 'canonical generation instructions explicitly prohibit anchors and hyperlinks' );
 draft_expect( false !== strpos( $instructions, 'href' ) && false !== strpos( $instructions, 'links, or URLs in content' ), 'canonical generation instructions prohibit href values, links, and URLs in content' );
 draft_expect( false !== strpos( $instructions, 'only through suggested_internal_link_ids' ) && false !== strpos( $instructions, 'only IDs supplied in allowed_internal_links' ), 'canonical generation instructions isolate internal-link recommendations to approved IDs' );
+draft_expect( false !== strpos( $instructions, 'Never stop mid-sentence or mid-section' ) && false !== strpos( $instructions, 'finish with a complete final paragraph' ), 'canonical generation instructions explicitly require a complete ending' );
 
 echo "360 AI draft workflow and validator tests passed.\n";

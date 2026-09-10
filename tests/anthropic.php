@@ -117,15 +117,19 @@ anthropic_expect( 'integer' === $anthropic_schema['properties']['opportunities']
 anthropic_expect( 5 === \Global360\AI\AI\OpportunityRequest::schema()['properties']['opportunities']['minItems'] && 100 === \Global360\AI\AI\OpportunityRequest::schema()['properties']['opportunities']['items']['properties']['priority']['maximum'], 'canonical OpenAI schema retains stronger constraints' );
 
 $draft_fixture = array( 'title' => 'Educational Topic 1', 'slug' => 'educational-topic-1', 'excerpt' => 'A sufficiently descriptive educational excerpt.', 'content' => '<p>' . str_repeat( 'Educational content for human review. ', 10 ) . '</p>', 'seo_title' => 'Educational Topic 1', 'meta_description' => 'A sufficiently descriptive educational meta description for review.', 'suggested_internal_link_ids' => array( 101 ) );
-$anthropic_http_response = anthropic_response( 200, array( 'model' => 'claude-sonnet-5', 'content' => array( array( 'type' => 'text', 'text' => json_encode( $draft_fixture ) ) ), 'usage' => array( 'input_tokens' => 20, 'output_tokens' => 30 ) ) );
+$anthropic_http_response = anthropic_response( 200, array( 'model' => 'claude-sonnet-5', 'stop_reason' => 'end_turn', 'content' => array( array( 'type' => 'text', 'text' => json_encode( $draft_fixture ) ) ), 'usage' => array( 'input_tokens' => 20, 'output_tokens' => 30 ) ) );
 $draft_result = $provider->generate_draft( array( 'opportunity' => array( 'id' => 'anthropic-1' ) ) );
 anthropic_expect( $draft_result->is_success() && $draft_fixture === $draft_result->draft, 'Anthropic draft response normalizes into DraftResponse' );
 anthropic_expect( 50 === $draft_result->usage['total_tokens'], 'Anthropic draft token usage is preserved' );
+anthropic_expect( 'completed' === $draft_result->completion['completion_status'] && 'end_turn' === $draft_result->completion['stop_reason'] && false === $draft_result->completion['output_limit_reached'], 'Anthropic draft completion metadata is normalized' );
 $draft_body = json_decode( $anthropic_request['args']['body'], true );
 anthropic_expect( 'json_schema' === $draft_body['output_config']['format']['type'], 'Anthropic draft request uses structured output' );
 anthropic_expect( \Global360\AI\Generation\DraftRequest::instructions() === $draft_body['system'], 'Anthropic draft request uses the canonical generation instructions' );
 foreach ( array( 'minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'minItems', 'maxItems', 'minLength', 'maxLength' ) as $keyword ) { anthropic_expect( ! anthropic_schema_has_keyword( $draft_body['output_config']['format']['schema'], $keyword ), 'Anthropic draft schema removes unsupported ' . $keyword ); }
 anthropic_expect( 10 === \Global360\AI\Generation\DraftRequest::schema()['properties']['suggested_internal_link_ids']['maxItems'], 'canonical draft schema remains strict for OpenAI' );
+$anthropic_http_response = anthropic_response( 200, array( 'model' => 'claude-sonnet-5', 'stop_reason' => 'max_tokens', 'content' => array( array( 'type' => 'text', 'text' => json_encode( $draft_fixture ) ) ), 'usage' => array( 'input_tokens' => 20, 'output_tokens' => 8192 ) ) );
+$anthropic_limited = $provider->generate_draft( array() );
+anthropic_expect( 'incomplete' === $anthropic_limited->completion['completion_status'] && true === $anthropic_limited->completion['output_limit_reached'], 'Anthropic max_tokens stop is normalized as incomplete' );
 $anthropic_http_response = anthropic_response( 200, array( 'content' => array( array( 'type' => 'text', 'text' => '{bad' ) ) ) );
 anthropic_expect( ! $provider->generate_draft( array() )->is_success(), 'malformed Anthropic draft output is rejected' );
 $anthropic_http_response = anthropic_response( 429, array( 'error' => array( 'type' => 'rate_limit_error', 'message' => 'Safe provider message.' ), 'request_id' => 'req_draft' ) );
@@ -133,12 +137,16 @@ $draft_failure = $provider->generate_draft( array( 'secret_context' => 'not-stor
 anthropic_expect( 429 === $draft_failure->diagnostics['http_status'] && 'rate_limit_error' === $draft_failure->diagnostics['provider_error_type'], 'Anthropic draft HTTP diagnostics are structured and sanitized' );
 
 $openai = new OpenAIProvider( 'request-fixture' );
-$anthropic_http_response = anthropic_response( 200, array( 'model' => 'gpt-5-mini', 'output' => array( array( 'content' => array( array( 'type' => 'output_text', 'text' => json_encode( $draft_fixture ) ) ) ) ), 'usage' => array( 'input_tokens' => 11, 'output_tokens' => 22, 'total_tokens' => 33 ) ) );
+$anthropic_http_response = anthropic_response( 200, array( 'model' => 'gpt-5-mini', 'status' => 'completed', 'output' => array( array( 'content' => array( array( 'type' => 'output_text', 'text' => json_encode( $draft_fixture ) ) ) ) ), 'usage' => array( 'input_tokens' => 11, 'output_tokens' => 22, 'total_tokens' => 33 ) ) );
 $openai_draft = $openai->generate_draft( array( 'bounded' => 'context' ) );
 anthropic_expect( $openai_draft->is_success() && $draft_fixture === $openai_draft->draft && 33 === $openai_draft->usage['total_tokens'], 'OpenAI draft response normalizes into the same DraftResponse' );
+anthropic_expect( 'completed' === $openai_draft->completion['completion_status'] && 'completed' === $openai_draft->completion['stop_reason'] && false === $openai_draft->completion['output_limit_reached'], 'OpenAI draft completion metadata is normalized' );
 $openai_body = json_decode( $anthropic_request['args']['body'], true );
 anthropic_expect( true === $openai_body['text']['format']['strict'] && 10 === $openai_body['text']['format']['schema']['properties']['suggested_internal_link_ids']['maxItems'], 'OpenAI draft request retains canonical strict schema' );
 anthropic_expect( \Global360\AI\Generation\DraftRequest::instructions() === $openai_body['instructions'], 'OpenAI draft request uses the canonical generation instructions' );
+$anthropic_http_response = anthropic_response( 200, array( 'model' => 'gpt-5-mini', 'status' => 'incomplete', 'incomplete_details' => array( 'reason' => 'max_output_tokens' ), 'output' => array( array( 'content' => array( array( 'type' => 'output_text', 'text' => json_encode( $draft_fixture ) ) ) ) ), 'usage' => array( 'input_tokens' => 11, 'output_tokens' => 8192, 'total_tokens' => 8203 ) ) );
+$openai_limited = $openai->generate_draft( array() );
+anthropic_expect( 'incomplete' === $openai_limited->completion['completion_status'] && 'max_output_tokens' === $openai_limited->completion['stop_reason'] && true === $openai_limited->completion['output_limit_reached'], 'OpenAI max-output stop is normalized as incomplete' );
 $anthropic_http_response = anthropic_response( 400, array( 'error' => array( 'type' => 'invalid_request_error', 'message' => 'Safe validation message.' ), 'request_id' => 'req_openai' ) );
 $openai_failure = $openai->generate_draft( array( 'secret_context' => 'not-stored' ) );
 anthropic_expect( 400 === $openai_failure->diagnostics['http_status'] && 'invalid_request_error' === $openai_failure->diagnostics['provider_error_type'] && ! isset( $openai_failure->diagnostics['headers'] ), 'OpenAI draft HTTP diagnostics are structured without secret leakage' );

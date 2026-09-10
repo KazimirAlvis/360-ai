@@ -38,9 +38,10 @@ final class DraftService {
 				$this->workflow->record_generation_attempt( $analysis_id, $opportunity_id, array( 'provider' => $response->provider, 'model' => $response->model, 'status' => 'provider_failed', 'usage' => $response->usage, 'diagnostics' => $response->diagnostics ) );
 				throw new \RuntimeException( $response->error );
 			}
-			try { $draft = $this->validator->validate( $response->draft, $opportunity, $context ); }
+			try { $draft = $this->validator->validate( $response->draft, $opportunity, $context, $response->completion ); }
 			catch ( \InvalidArgumentException $error ) {
 				$diagnostics = $error instanceof DraftValidationException ? $error->diagnostics() : array( 'validation_field' => 'draft', 'validation_rule' => 'deterministic_validation' );
+				$diagnostics = array_merge( $response->completion, $diagnostics );
 				$this->workflow->record_failure( $analysis_id, $opportunity_id, 'Generated draft failed deterministic validation.', $diagnostics );
 				$this->workflow->record_generation_attempt( $analysis_id, $opportunity_id, array( 'provider' => $response->provider, 'model' => $response->model, 'status' => 'validation_failed', 'usage' => $response->usage, 'diagnostics' => $diagnostics ) );
 				throw $error;
@@ -65,7 +66,7 @@ final class DraftService {
 			foreach ( $meta as $key => $value ) { update_post_meta( (int) $post_id, $key, $value ); }
 			try { $this->workflow->transition( $analysis_id, $opportunity_id, 'draft_created', (int) $post_id ); }
 			catch ( \Throwable $error ) { wp_delete_post( (int) $post_id, true ); throw $error; }
-			$this->workflow->record_generation_attempt( $analysis_id, $opportunity_id, array( 'provider' => $response->provider, 'model' => $response->model, 'status' => 'draft_created', 'usage' => $response->usage, 'draft_post_id' => (int) $post_id ) );
+			$this->workflow->record_generation_attempt( $analysis_id, $opportunity_id, array( 'provider' => $response->provider, 'model' => $response->model, 'status' => 'draft_created', 'usage' => $response->usage, 'diagnostics' => $response->completion, 'draft_post_id' => (int) $post_id ) );
 			return (int) $post_id;
 		} finally {
 			$this->lock->release( $analysis_id, $opportunity_id );

@@ -4,22 +4,23 @@ namespace Global360\AI\Generation;
 
 final class DraftValidator {
 	private const MIN_CONTENT = 200;
+	private const MIN_PAGE_WORDS = 450;
 	private const MAX_CONTENT = 20000;
 	private const ALLOWED_KEYS = array( 'title', 'slug', 'excerpt', 'content', 'seo_title', 'meta_description', 'suggested_internal_link_ids' );
 	private const ALLOWED_HTML = array( 'p', 'h2', 'h3', 'ul', 'ol', 'li', 'strong', 'em' );
 	private const UNSAFE_HTML = array( 'script', 'iframe', 'form', 'input', 'button', 'object', 'embed', 'style', 'svg', 'video', 'audio', 'canvas' );
 
 	/** @return array<string,mixed> */
-	public function validate( array $draft, array $opportunity, array $context ): array {
+	public function validate( array $draft, array $opportunity, array $context, array $completion = array() ): array {
 		if ( array_diff( self::ALLOWED_KEYS, array_keys( $draft ) ) ) { throw new \InvalidArgumentException( 'Draft output is missing required fields.' ); }
 		if ( array_diff( array_keys( $draft ), self::ALLOWED_KEYS ) ) { throw new \InvalidArgumentException( 'Draft output contains unexpected fields.' ); }
-		$title = sanitize_text_field( (string) ( $draft['title'] ?? '' ) );
+		$title = sanitize_text_field( $this->normalize_plain_text( (string) ( $draft['title'] ?? '' ) ) );
 		$raw_slug = (string) ( $draft['slug'] ?? '' );
 		$slug = sanitize_title( $raw_slug );
-		$excerpt = sanitize_textarea_field( (string) ( $draft['excerpt'] ?? '' ) );
+		$excerpt = sanitize_textarea_field( $this->normalize_plain_text( (string) ( $draft['excerpt'] ?? '' ) ) );
 		$content = trim( (string) ( $draft['content'] ?? '' ) );
-		$seo_title = sanitize_text_field( (string) ( $draft['seo_title'] ?? '' ) );
-		$meta_description = sanitize_textarea_field( (string) ( $draft['meta_description'] ?? '' ) );
+		$seo_title = sanitize_text_field( $this->normalize_plain_text( (string) ( $draft['seo_title'] ?? '' ) ) );
+		$meta_description = sanitize_textarea_field( $this->normalize_plain_text( (string) ( $draft['meta_description'] ?? '' ) ) );
 		if ( '' === $title ) { throw new \InvalidArgumentException( 'Draft title is required.' ); }
 		if ( '' === $raw_slug || $slug !== $raw_slug ) { throw new \InvalidArgumentException( 'Draft slug is invalid.' ); }
 		if ( '' === $excerpt ) { throw new \InvalidArgumentException( 'Draft excerpt is required.' ); }
@@ -28,6 +29,9 @@ final class DraftValidator {
 		$length = function_exists( 'mb_strlen' ) ? mb_strlen( wp_strip_all_tags( $content ) ) : strlen( wp_strip_all_tags( $content ) );
 		if ( self::MIN_CONTENT > $length || self::MAX_CONTENT < $length ) { throw new \InvalidArgumentException( 'Draft content length is outside the allowed range.' ); }
 		if ( ! in_array( (string) ( $opportunity['content_type'] ?? '' ), array( 'page', 'post' ), true ) ) { throw new \InvalidArgumentException( 'Approved opportunity has an unexpected post type.' ); }
+		if ( 'page' === (string) $opportunity['content_type'] && self::MIN_PAGE_WORDS > $this->word_count( $content ) ) {
+			throw new DraftValidationException( 'Generated Page content is too short to be a useful complete draft.', array( 'validation_field' => 'content', 'validation_rule' => 'minimum_content' ) );
+		}
 		if ( sanitize_title( (string) ( $opportunity['suggested_slug'] ?? '' ) ) !== $slug || ! $this->titles_correspond( $title, (string) ( $opportunity['proposed_title'] ?? '' ) ) ) { throw new \InvalidArgumentException( 'Generated title or slug does not correspond to the approved opportunity.' ); }
 		if ( preg_match( '/```|\[[^\]]+\]/', $content ) ) { throw new \InvalidArgumentException( 'Draft content contains a prohibited Markdown fence or shortcode.' ); }
 		$allowed_html = array_fill_keys( self::ALLOWED_HTML, array() );
@@ -39,6 +43,7 @@ final class DraftValidator {
 		if ( $clean_content !== $content ) {
 			throw new DraftValidationException( 'Draft content contains unsupported or unsafe HTML.', $diagnostics );
 		}
+		$this->validate_completion( $clean_content, $completion );
 		$allowed_ids = array_map( 'absint', array_column( (array) ( $context['allowed_internal_links'] ?? array() ), 'id' ) );
 		$link_ids = array_values( array_unique( array_map( 'absint', (array) ( $draft['suggested_internal_link_ids'] ?? array() ) ) ) );
 		if ( array_diff( $link_ids, $allowed_ids ) ) { throw new \InvalidArgumentException( 'Draft contains an invalid internal-link target.' ); }
@@ -48,6 +53,31 @@ final class DraftValidator {
 			'meta_description' => substr( $meta_description, 0, 320 ),
 			'suggested_internal_link_ids' => $link_ids,
 		);
+	}
+
+	private function validate_completion( string $content, array $completion ): void {
+		$status = sanitize_key( (string) ( $completion['completion_status'] ?? '' ) );
+		$reason = sanitize_key( (string) ( $completion['stop_reason'] ?? '' ) );
+		$limited = ! empty( $completion['output_limit_reached'] ) || in_array( $reason, array( 'max_tokens', 'max_output_tokens' ), true );
+		$text = trim( html_entity_decode( wp_strip_all_tags( $content ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ) );
+		if ( $limited || in_array( $status, array( 'incomplete', 'refused' ), true ) || '' === $text || ! preg_match( '/[.!?](?:[\x{2019}\x{201D}\"\x{27})\]])*$/u', $text ) ) {
+			throw new DraftValidationException( 'Generated draft content appears incomplete.', array(
+				'validation_field' => 'content', 'validation_rule' => 'incomplete_content',
+				'completion_status' => $status,
+				'stop_reason' => $reason, 'output_limit_reached' => $limited,
+			) );
+		}
+	}
+
+	private function word_count( string $content ): int {
+		$text = trim( wp_strip_all_tags( preg_replace( '/<[^>]+>/', ' ', $content ) ) );
+		if ( '' === $text ) { return 0; }
+		$count = preg_match_all( '/[\p{L}\p{N}]+(?:[\x{2019}\x{27}-][\p{L}\p{N}]+)*/u', $text, $matches );
+		return false === $count ? 0 : $count;
+	}
+
+	private function normalize_plain_text( string $value ): string {
+		return preg_replace( '/(?<![A-Za-z0-9])(?:\\\\u0026|u0026)(?![A-Za-z0-9])/i', '&', $value );
 	}
 
 	/** @return array<string,mixed> */

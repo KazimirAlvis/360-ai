@@ -85,7 +85,20 @@ final class OpenAIProvider implements ProviderInterface {
 		$usage = (array) ( $body['usage'] ?? array() );
 		return new DraftResponse( $data, $this->name(), (string) ( $body['model'] ?? $this->model() ), array(
 			'input_tokens' => (int) ( $usage['input_tokens'] ?? 0 ), 'output_tokens' => (int) ( $usage['output_tokens'] ?? 0 ), 'total_tokens' => (int) ( $usage['total_tokens'] ?? 0 ),
-		) );
+		), '', array(), $this->completion_metadata( $body ) );
+	}
+
+	/** @return array<string,mixed> */
+	private function completion_metadata( array $body ): array {
+		$status = substr( sanitize_key( (string) ( $body['status'] ?? '' ) ), 0, 64 );
+		$details = isset( $body['incomplete_details'] ) && is_array( $body['incomplete_details'] ) ? $body['incomplete_details'] : array();
+		$reason = substr( sanitize_key( (string) ( $details['reason'] ?? $status ) ), 0, 64 );
+		$limited = 'max_output_tokens' === $reason;
+		return array(
+			'completion_status' => '' !== $status ? $status : ( $limited ? 'incomplete' : 'completed' ),
+			'stop_reason' => $reason,
+			'output_limit_reached' => $limited,
+		);
 	}
 
 	/** @return array<string,mixed> */

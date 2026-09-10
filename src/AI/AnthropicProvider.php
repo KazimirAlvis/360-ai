@@ -100,7 +100,18 @@ final class AnthropicProvider implements ProviderInterface {
 		$data = json_decode( $text, true );
 		if ( ! is_array( $data ) ) { return DraftResponse::failure( $this->name(), (string) ( $body['model'] ?? $this->model() ), 'Anthropic returned invalid draft output.' ); }
 		$usage = (array) ( $body['usage'] ?? array() ); $input = (int) ( $usage['input_tokens'] ?? 0 ); $output = (int) ( $usage['output_tokens'] ?? 0 );
-		return new DraftResponse( $data, $this->name(), (string) ( $body['model'] ?? $this->model() ), array( 'input_tokens' => $input, 'output_tokens' => $output, 'total_tokens' => $input + $output ) );
+		return new DraftResponse( $data, $this->name(), (string) ( $body['model'] ?? $this->model() ), array( 'input_tokens' => $input, 'output_tokens' => $output, 'total_tokens' => $input + $output ), '', array(), $this->completion_metadata( $body ) );
+	}
+
+	/** @return array<string,mixed> */
+	private function completion_metadata( array $body ): array {
+		$reason = substr( sanitize_key( (string) ( $body['stop_reason'] ?? '' ) ), 0, 64 );
+		$limited = 'max_tokens' === $reason;
+		return array(
+			'completion_status' => $limited ? 'incomplete' : ( 'refusal' === $reason ? 'refused' : 'completed' ),
+			'stop_reason' => $reason,
+			'output_limit_reached' => $limited,
+		);
 	}
 
 	/** @return array<string,mixed> */

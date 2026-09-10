@@ -36,7 +36,10 @@ final class WorkflowRepository {
 		$current['status'] = $to;
 		$current['created_at'] = $current['created_at'] ?: $now;
 		$current['updated_at'] = $now;
-		if ( 'draft_created' === $to ) { $current['draft_post_id'] = $draft_post_id; }
+		if ( 'draft_created' === $to ) {
+			$current['draft_post_id'] = $draft_post_id;
+			unset( $current['generation_error'], $current['generation_diagnostics'] );
+		}
 		$records = $this->records();
 		$records[ $this->key( $analysis_id, $opportunity_id ) ] = $current;
 		update_option( self::OPTION, $records, false );
@@ -85,6 +88,9 @@ final class WorkflowRepository {
 			'provider_request_id' => substr( preg_replace( '/[^A-Za-z0-9_-]/', '', (string) ( $diagnostics['provider_request_id'] ?? '' ) ), 0, 128 ),
 			'validation_field' => substr( sanitize_key( (string) ( $diagnostics['validation_field'] ?? '' ) ), 0, 64 ),
 			'validation_rule' => substr( sanitize_key( (string) ( $diagnostics['validation_rule'] ?? '' ) ), 0, 64 ),
+			'completion_status' => substr( sanitize_key( (string) ( $diagnostics['completion_status'] ?? '' ) ), 0, 64 ),
+			'stop_reason' => substr( sanitize_key( (string) ( $diagnostics['stop_reason'] ?? '' ) ), 0, 64 ),
+			'output_limit_reached' => ! empty( $diagnostics['output_limit_reached'] ),
 		);
 		foreach ( array( 'unsupported_tags' => 10, 'unsupported_attributes' => 20, 'unsafe_tags' => 10, 'unsafe_attributes' => 20 ) as $key => $limit ) {
 			$tokens = array(); foreach ( (array) ( $diagnostics[ $key ] ?? array() ) as $token ) { $token = substr( preg_replace( '/[^a-z0-9:_-]/', '', strtolower( (string) $token ) ), 0, 64 ); if ( '' !== $token ) { $tokens[] = $token; } }
