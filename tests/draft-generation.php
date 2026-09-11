@@ -1,7 +1,7 @@
 <?php
 
 define( 'ABSPATH', __DIR__ . '/' );
-define( 'GLOBAL360_AI_VERSION', '0.3.0-dev' );
+define( 'GLOBAL360_AI_VERSION', '0.3.0' );
 
 $draft_options = array();
 $draft_can_manage = true;

@@ -2,7 +2,7 @@
 
 360 AI is the general AI layer for the 360 platform. It is **not** an SEO-only plugin. SEO and GEO/AEO will be modules alongside future content, auditing, internal-linking, image, Search Console, and analytics-assisted workflows.
 
-## Current development version: 0.3.0-dev
+## Current release: 0.3.0
 
 The foundation release provides:
 
@@ -29,9 +29,9 @@ Version 0.2.0 adds **Content Opportunities**, a human-review workflow that build
 
 Draft generation is deliberately not part of 0.2.0. No public endpoint, Clinic/Doctor write, or SEOPress write exists.
 
-## Draft-generation development
+## Draft generation
 
-The `0.3.0-dev` line adds an explicitly human-controlled workflow: every stored opportunity begins pending, an administrator may approve or reject it, and only an approved opportunity can invoke draft generation. Generated content is always inserted as a WordPress draft for editorial review and is never published automatically.
+Version 0.3.0 adds an explicitly human-controlled workflow: every stored opportunity begins pending, an administrator may approve or reject it, and only an approved opportunity can invoke draft generation. Generated content is always inserted as a WordPress draft for editorial review and is never published automatically.
 
 - Workflow state is stored separately from immutable analysis history and supports only validated transitions between pending, approved, rejected, and draft-created states.
 - OpenAI and Anthropic share one structured draft contract; Anthropic receives its established provider-safe schema transformation, while `MockProvider` supports deterministic local testing without paid requests.
