@@ -2,7 +2,7 @@
 
 360 AI is the general AI layer for the 360 platform. It is **not** an SEO-only plugin. SEO and GEO/AEO will be modules alongside future content, auditing, internal-linking, image, Search Console, and analytics-assisted workflows.
 
-## Current release: 0.3.0
+## Current release: 0.4.0
 
 The foundation release provides:
 
@@ -31,15 +31,19 @@ Draft generation is deliberately not part of 0.2.0. No public endpoint, Clinic/D
 
 ## Draft generation
 
-Version 0.3.0 adds an explicitly human-controlled workflow: every stored opportunity begins pending, an administrator may approve or reject it, and only an approved opportunity can invoke draft generation. Generated content is always inserted as a WordPress draft for editorial review and is never published automatically.
+Version 0.3.0 added an explicitly human-controlled workflow: every stored opportunity begins pending, an administrator may approve or reject it, and only an approved opportunity can invoke draft generation.
+
+Version 0.4.0 adds a private **Content Drafts** editorial workspace. New provider-generated drafts remain outside normal Pages and Posts until an administrator reviews them and explicitly converts one to its validated intended type. Conversion creates exactly one ordinary WordPress draft, never publishes, and never calls a provider.
 
 - Workflow state is stored separately from immutable analysis history and supports only validated transitions between pending, approved, rejected, and draft-created states.
 - OpenAI and Anthropic share one structured draft contract; Anthropic receives its established provider-safe schema transformation, while `MockProvider` supports deterministic local testing without paid requests.
 - Deterministic validation accepts only attribute-free `p`, `h2`, `h3`, `ul`, `ol`, `li`, `strong`, and `em` markup. Links remain suggestions by validated post ID rather than provider-authored `<a>` elements. All other tags and all attributes—including classes, styles, IDs, event handlers, and provider URLs—remain fail-closed and reject the draft instead of being silently stripped.
 - A request-local generation context includes only the approved opportunity, relevant site context, explicitly referenced content links, and referenced Core entities/locations.
-- Duplicate lookup and an atomic short-lived generation lock prevent double-click or concurrent duplicate drafts and provider calls.
-- Draft provenance, token usage, SEO title/description suggestions, and validated internal-link suggestions use private `_global360_ai_*` metadata. This milestone deliberately does not write undocumented SEOPress fields or insert AI-created URLs.
-- Clinic, Doctor, relationship, and location records remain read-only inputs owned by Platform Core/API Sync. Generation writes only a new Page/Post draft and 360 AI metadata on that draft.
+- Duplicate lookup and atomic generation/conversion locks prevent double-click or concurrent duplicate drafts and provider calls.
+- Draft provenance, token usage, SEO title/description suggestions, and validated internal-link suggestions use private `_global360_ai_*` metadata on the Content Draft and resulting WordPress draft.
+- Editors can revise the Content Draft title, final slug, excerpt, content, SEO title, and meta description before conversion. The final Page/Post URL comes exclusively from normal WordPress routing and has no Content Draft prefix.
+- On conversion, the reviewed SEO title and description are copied to the installed SEOPress contract (`_seopress_titles_title` and `_seopress_titles_desc`). SEOPress remains optional; conversion still succeeds while retaining private SEO provenance when it is unavailable.
+- Clinic, Doctor, relationship, and location records remain read-only inputs owned by Platform Core/API Sync. Generation writes only a private Content Draft; explicit conversion writes one normal Page/Post draft.
 - Provider and validation failures leave the opportunity approved, create no post, perform no automatic retry, and retain only bounded sanitized diagnostics. A private, 20-entry-per-opportunity attempt history records provider/model, token usage, status, and structural validation names such as rejected tags or attributes, never prompts, context, generated prose, credentials, or raw responses.
 
 ## Architecture

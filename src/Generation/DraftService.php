@@ -3,6 +3,7 @@
 namespace Global360\AI\Generation;
 
 use Global360\AI\AI\ProviderFactory;
+use Global360\AI\Content\ContentDraftPostType;
 use Global360\AI\Storage\WorkflowRepository;
 
 final class DraftService {
@@ -47,8 +48,8 @@ final class DraftService {
 				throw $error;
 			}
 			$post_id = wp_insert_post( array(
-				'post_status' => 'draft', 'post_type' => (string) $opportunity['content_type'], 'post_author' => $author_id,
-				'post_title' => $draft['title'], 'post_name' => $draft['slug'], 'post_excerpt' => $draft['excerpt'], 'post_content' => $draft['content'],
+				'post_status' => 'draft', 'post_type' => ContentDraftPostType::POST_TYPE, 'post_author' => $author_id,
+				'post_title' => $draft['title'], 'post_excerpt' => $draft['excerpt'], 'post_content' => $draft['content'],
 			), true );
 			if ( is_wp_error( $post_id ) || 1 > (int) $post_id ) { throw new \RuntimeException( 'WordPress could not create the draft.' ); }
 			$meta = array(
@@ -60,6 +61,8 @@ final class DraftService {
 				'_global360_ai_plugin_version' => defined( 'GLOBAL360_AI_VERSION' ) ? GLOBAL360_AI_VERSION : '',
 				'_global360_ai_seo_title' => $draft['seo_title'],
 				'_global360_ai_meta_description' => $draft['meta_description'],
+				'_global360_ai_intended_post_type' => (string) $opportunity['content_type'],
+				'_global360_ai_final_slug' => $draft['slug'],
 				'_global360_ai_suggested_internal_link_ids' => $draft['suggested_internal_link_ids'],
 				'_global360_ai_generation_usage' => $response->usage,
 			);
@@ -75,7 +78,7 @@ final class DraftService {
 
 	private function existing_draft( string $analysis_id, string $opportunity_id ): int {
 		$ids = get_posts( array(
-			'post_type' => array( 'page', 'post' ), 'post_status' => 'any', 'posts_per_page' => 1, 'fields' => 'ids', 'no_found_rows' => true,
+			'post_type' => array( ContentDraftPostType::POST_TYPE, 'page', 'post' ), 'post_status' => 'any', 'posts_per_page' => 1, 'fields' => 'ids', 'no_found_rows' => true,
 			'meta_query' => array(
 				'relation' => 'AND',
 				array( 'key' => '_global360_ai_analysis_id', 'value' => $analysis_id ),
