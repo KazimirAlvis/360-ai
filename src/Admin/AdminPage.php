@@ -17,6 +17,17 @@ final class AdminPage {
 
 	public function register_hooks(): void {
 		add_action( 'admin_menu', array( $this, 'register_menu' ) );
+		add_action( 'admin_menu', array( $this, 'prioritize_dashboard' ), 99 );
+	}
+
+	public function prioritize_dashboard(): void {
+		global $submenu;
+		if ( empty( $submenu[ self::MENU_SLUG ] ) || ! is_array( $submenu[ self::MENU_SLUG ] ) ) { return; }
+		$dashboard = array(); $remaining = array();
+		foreach ( $submenu[ self::MENU_SLUG ] as $item ) {
+			if ( isset( $item[2] ) && self::MENU_SLUG === $item[2] ) { $dashboard[] = $item; } else { $remaining[] = $item; }
+		}
+		$submenu[ self::MENU_SLUG ] = array_merge( $dashboard, $remaining );
 	}
 
 	public function register_menu(): void {
@@ -28,6 +39,14 @@ final class AdminPage {
 			array( $this, 'render' ),
 			'dashicons-lightbulb',
 			58
+		);
+		add_submenu_page(
+			self::MENU_SLUG,
+			__( '360 AI', '360-ai' ),
+			__( 'Dashboard', '360-ai' ),
+			self::CAPABILITY,
+			self::MENU_SLUG,
+			array( $this, 'render' )
 		);
 	}
 

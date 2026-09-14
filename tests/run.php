@@ -50,6 +50,7 @@ function get_the_title( $post ) { return $post->post_title; }
 function get_permalink( $post ) { $id = $post instanceof WP_Post ? $post->ID : (int) $post; return 'https://example.test/?p=' . $id; }
 function add_action( $hook, $callback ) { global $test_actions; $test_actions[ $hook ][] = $callback; }
 function add_menu_page( $page, $menu, $capability, $slug ) { global $test_menu; $test_menu = compact( 'page', 'menu', 'capability', 'slug' ); }
+function add_submenu_page() { return ''; }
 function current_user_can() { global $test_can_manage; return $test_can_manage; }
 function wp_die( $message ) { throw new RuntimeException( $message ); }
 function esc_html( $value ) { return htmlspecialchars( (string) $value, ENT_QUOTES, 'UTF-8' ); }
@@ -99,6 +100,7 @@ final class FakePlatform {
 
 $bootstrap = file_get_contents( dirname( __DIR__ ) . '/360-ai.php' );
 ai_expect( false !== strpos( $bootstrap, 'Plugin Name: 360 AI' ) && false !== strpos( $bootstrap, "'src/Plugin.php'" ), 'plugin bootstrap declares identity and loads modular Plugin class' );
+ai_expect( false !== strpos( $bootstrap, 'Version: 0.4.0' ) && false !== strpos( $bootstrap, "define( 'GLOBAL360_AI_VERSION', '0.4.0' )" ), '0.4.0 plugin header and authoritative version constant are synchronized' );
 
 $missing = new CoreAdapter( static function () { return null; } );
 ai_expect( ! $missing->is_available() && '' === $missing->version(), 'Core unavailability is graceful' );
@@ -142,5 +144,11 @@ ai_expect( ! preg_match( '/\b(?:add|update|delete)_post_meta\s*\(/', $domain_sou
 ai_expect( false === strpos( $domain_sources, 'get_post_meta(' ), 'analysis and Core adapters do not read legacy Clinic/Doctor meta directly' );
 $draft_source = file_get_contents( dirname( __DIR__ ) . '/src/Generation/DraftService.php' );
 ai_expect( false === strpos( $draft_source, "'post_type' => 'clinic'" ) && false === strpos( $draft_source, "'post_type' => 'doctor'" ), 'draft generation cannot target Clinic or Doctor post types' );
+$content_source = file_get_contents( dirname( __DIR__ ) . '/src/Content/ContentDraftPostType.php' );
+$conversion_source = file_get_contents( dirname( __DIR__ ) . '/src/Generation/ConversionService.php' );
+ai_expect( false !== strpos( $content_source, "'public' => false" ) && false !== strpos( $content_source, "'publicly_queryable' => false" ) && false !== strpos( $content_source, "'show_in_rest' => false" ) && false !== strpos( $content_source, "'rewrite' => false" ), 'Content Draft contract is private with no REST or rewrite exposure' );
+ai_expect( false !== strpos( $content_source, "current_user_can( 'manage_options' )" ) && false !== strpos( $content_source, 'check_admin_referer(' ), 'conversion action requires capability and a post-bound nonce' );
+ai_expect( false !== strpos( $conversion_source, "array( 'page', 'post' )" ) && false !== strpos( $conversion_source, "'post_status' => 'draft'" ), 'conversion accepts only Page/Post and can create only a draft' );
+ai_expect( false === strpos( $conversion_source, 'generate_draft(' ), 'conversion makes no provider request' );
 
 echo "360 AI focused tests passed.\n";

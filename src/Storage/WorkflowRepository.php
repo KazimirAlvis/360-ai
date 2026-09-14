@@ -56,6 +56,31 @@ final class WorkflowRepository {
 		update_option( self::OPTION, $records, false );
 	}
 
+	/** @return array<string,mixed> */
+	public function record_conversion( string $analysis_id, string $opportunity_id, int $content_draft_id, int $final_post_id, string $final_post_type ): array {
+		if ( 1 > $content_draft_id || 1 > $final_post_id || ! in_array( $final_post_type, array( 'page', 'post' ), true ) ) {
+			throw new \InvalidArgumentException( 'Conversion requires valid content and final draft details.' );
+		}
+		$current = $this->get( $analysis_id, $opportunity_id );
+		if ( 'draft_created' !== ( $current['status'] ?? '' ) || $content_draft_id !== (int) ( $current['draft_post_id'] ?? 0 ) ) {
+			throw new \DomainException( 'Only the workflow Content Draft can be converted.' );
+		}
+		if ( ! empty( $current['final_post_id'] ) ) {
+			if ( $final_post_id !== (int) $current['final_post_id'] || $final_post_type !== (string) ( $current['final_post_type'] ?? '' ) ) {
+				throw new \DomainException( 'The workflow is already linked to a different final draft.' );
+			}
+			return $current;
+		}
+		$current['final_post_id'] = $final_post_id;
+		$current['final_post_type'] = $final_post_type;
+		$current['converted_at'] = gmdate( 'c' );
+		$current['updated_at'] = $current['converted_at'];
+		$records = $this->records();
+		$records[ $this->key( $analysis_id, $opportunity_id ) ] = $current;
+		update_option( self::OPTION, $records, false );
+		return $current;
+	}
+
 	/** @param array<string,mixed> $attempt */
 	public function record_generation_attempt( string $analysis_id, string $opportunity_id, array $attempt ): void {
 		$current = $this->get( $analysis_id, $opportunity_id );

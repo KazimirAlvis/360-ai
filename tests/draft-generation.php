@@ -67,6 +67,11 @@ draft_rejects( static function () use ( $workflow, $analysis_id ) { $workflow->g
 draft_rejects( static function () use ( $workflow, $analysis_id ) { $workflow->transition( $analysis_id, 'three', 'pending' ); }, 'draft_created is terminal' );
 draft_rejects( static function () use ( $workflow, $analysis_id ) { $workflow->transition( $analysis_id, 'three', 'approved' ); }, 'draft_created cannot transition to approved' );
 draft_rejects( static function () use ( $workflow, $analysis_id ) { $workflow->transition( $analysis_id, 'three', 'rejected' ); }, 'draft_created cannot transition to rejected' );
+$converted = $workflow->record_conversion( $analysis_id, 'three', 123, 456, 'post' );
+draft_expect( 'draft_created' === $converted['status'] && 456 === $converted['final_post_id'] && 'post' === $converted['final_post_type'], 'conversion records final draft without rewriting terminal workflow status' );
+draft_expect( 456 === $workflow->record_conversion( $analysis_id, 'three', 123, 456, 'post' )['final_post_id'], 'identical conversion recording is idempotent' );
+draft_rejects( static function () use ( $workflow, $analysis_id ) { $workflow->record_conversion( $analysis_id, 'three', 123, 457, 'post' ); }, 'workflow rejects a second final draft' );
+draft_rejects( static function () use ( $workflow, $analysis_id ) { $workflow->record_conversion( $analysis_id, 'three', 123, 456, 'clinic' ); }, 'workflow rejects an arbitrary final post type' );
 
 $guard = new WorkflowRequestGuard();
 $guard->assert( 'action', $analysis_id, 'one', 'valid' );

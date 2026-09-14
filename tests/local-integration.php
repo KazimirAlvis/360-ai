@@ -11,6 +11,7 @@ use Global360\AI\Admin\AdminPage;
 use Global360\AI\Context\ContentInventory;
 use Global360\AI\Context\SiteContextBuilder;
 use Global360\AI\Core\CoreAdapter;
+use Global360\AI\Content\ContentDraftPostType;
 
 function ai_integration_expect( $condition, $message ) {
 	if ( ! $condition ) { throw new RuntimeException( $message ); }
@@ -29,6 +30,14 @@ foreach ( (array) ( $wp_filter['admin_menu']->callbacks ?? array() ) as $callbac
 	}
 }
 ai_integration_expect( $admin_hook_found, '360 AI admin menu callback is registered' );
+$content_type = get_post_type_object( ContentDraftPostType::POST_TYPE );
+ai_integration_expect( $content_type instanceof WP_Post_Type, 'Content Draft post type is registered' );
+ai_integration_expect( ! $content_type->public && ! $content_type->publicly_queryable && $content_type->exclude_from_search && false === $content_type->rewrite && ! $content_type->has_archive, 'Content Draft post type has no public query, rewrite, or archive surface' );
+ai_integration_expect( ! $content_type->show_in_rest && false === $content_type->query_var, 'Content Draft post type has no unauthenticated REST or query-var exposure' );
+$rest_response = rest_do_request( new WP_REST_Request( 'GET', '/wp/v2/' . ContentDraftPostType::POST_TYPE ) );
+ai_integration_expect( 404 === $rest_response->get_status(), 'anonymous REST discovery has no Content Draft route' );
+$sitemap_types = wp_sitemaps_get_server()->index->get_sitemap_list();
+ai_integration_expect( false === strpos( serialize( $sitemap_types ), ContentDraftPostType::POST_TYPE ), 'Content Draft post type is absent from WordPress sitemaps' );
 
 $clinic_ids = get_posts( array( 'post_type' => 'clinic', 'post_status' => 'publish', 'posts_per_page' => -1, 'fields' => 'ids', 'no_found_rows' => true ) );
 $doctor_ids = get_posts( array( 'post_type' => 'doctor', 'post_status' => 'publish', 'posts_per_page' => -1, 'fields' => 'ids', 'no_found_rows' => true ) );

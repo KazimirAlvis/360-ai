@@ -144,9 +144,10 @@ final class ContentOpportunitiesPage {
 	private function workflow_controls( string $analysis_id, string $opportunity_id, array $state ): void {
 		$status = (string) ( $state['status'] ?? 'pending' );
 		if ( 'draft_created' === $status ) {
-			$link = get_edit_post_link( (int) ( $state['draft_post_id'] ?? 0 ), '' );
+			$draft_id = (int) ( $state['draft_post_id'] ?? 0 );
+			$link = get_edit_post_link( $draft_id, '' );
 			echo '<p><strong>' . esc_html__( 'Draft Created', '360-ai' ) . '</strong> ';
-			if ( $link ) { echo '<a class="button button-primary" href="' . esc_url( $link ) . '">' . esc_html__( 'Edit Draft', '360-ai' ) . '</a>'; }
+			if ( $link ) { $label = 'g360_content' === get_post_type( $draft_id ) ? 'Edit Content Draft' : 'Edit Draft'; echo '<a class="button button-primary" href="' . esc_url( $link ) . '">' . esc_html__( $label, '360-ai' ) . '</a>'; }
 			echo '</p>'; return;
 		}
 		echo '<p><strong>' . esc_html( ucfirst( $status ) ) . '</strong></p>';
