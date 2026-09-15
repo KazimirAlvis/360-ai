@@ -79,6 +79,7 @@ function fixture_opportunity( $number ) {
 }
 
 function fixture_five() { return array_map( 'fixture_opportunity', range( 1, 5 ) ); }
+function fixture_eight() { return array_map( 'fixture_opportunity', range( 1, 8 ) ); }
 
 $context = array(
 	'existing_content' => array( array( 'id' => 101, 'title' => 'Understanding Recovery Time', 'slug' => 'understanding-recovery-time' ) ),
@@ -90,65 +91,75 @@ $context = array(
 
 $mock = new MockProvider();
 analysis_expect( $mock instanceof ProviderInterface && $mock->is_configured(), 'MockProvider implements the configured provider contract' );
-analysis_expect( 5 === count( $mock->analyze( array() )->opportunities ), 'MockProvider returns exactly five deterministic opportunities' );
+analysis_expect( 8 === count( $mock->analyze( array() )->opportunities ), 'MockProvider returns exactly eight deterministic candidates' );
 $format = OpenAIProvider::format();
-analysis_expect( 'json_schema' === $format['type'] && true === $format['strict'] && 5 === $format['schema']['properties']['opportunities']['minItems'] && 5 === $format['schema']['properties']['opportunities']['maxItems'], 'OpenAI provider uses strict exactly-five structured output' );
+analysis_expect( 'json_schema' === $format['type'] && true === $format['strict'] && 8 === $format['schema']['properties']['opportunities']['minItems'] && 8 === $format['schema']['properties']['opportunities']['maxItems'], 'OpenAI provider uses strict exactly-eight candidate output' );
 
 $validator = new OpportunityValidator();
-analysis_expect( 5 === count( $validator->validate( fixture_five(), $context ) ), 'exactly-five opportunity schema validates' );
-$count_diagnostic = analysis_diagnostic( static function () use ( $validator, $context ) { $validator->validate( array_slice( fixture_five(), 0, 4 ), $context ); } );
-analysis_expect( 'opportunity_count' === $count_diagnostic['validation_rule'] && '4' === $count_diagnostic['offending_value'], 'count failure retains a stable rule and bounded primitive count' );
-$malformed_diagnostic = analysis_diagnostic( static function () use ( $validator, $context ) { $items = fixture_five(); $items[2] = 'invalid'; $validator->validate( $items, $context ); } );
+$selected = $validator->validate( fixture_eight(), $context );
+analysis_expect( array( 'item-1', 'item-2', 'item-3', 'item-4', 'item-5' ) === array_column( $selected, 'id' ), 'eight valid candidates select the first five with stable IDs' );
+analysis_expect( array( 'candidates_received' => 8, 'candidates_selected' => 5, 'candidates_rejected' => 3, 'rejection_rules' => array( 'not_selected_after_limit' => 3 ) ) === $validator->selection_diagnostics(), 'all-valid selection retains bounded eight-to-five counts' );
+$count_diagnostic = analysis_diagnostic( static function () use ( $validator, $context ) { $validator->validate( array_slice( fixture_eight(), 0, 7 ), $context ); } );
+analysis_expect( 'candidate_count' === $count_diagnostic['validation_rule'] && '7' === $count_diagnostic['offending_value'], 'structural candidate-count failure retains a stable rule and bounded count' );
+$malformed_diagnostic = analysis_diagnostic( static function () use ( $validator, $context ) { $items = fixture_eight(); $items[2] = 'invalid'; $validator->validate( $items, $context ); } );
 analysis_expect( 'malformed_opportunity' === $malformed_diagnostic['validation_rule'] && 3 === $malformed_diagnostic['opportunity_index'], 'malformed opportunity retains a stable rule and index without retaining its payload' );
-analysis_rejects( static function () use ( $validator, $context ) { $validator->validate( array_slice( fixture_five(), 0, 4 ), $context ); }, 'four opportunities are rejected' );
-analysis_rejects( static function () use ( $validator, $context ) { $items = fixture_five(); $items[] = fixture_opportunity( 6 ); $validator->validate( $items, $context ); }, 'six opportunities are rejected' );
-analysis_rejects( static function () use ( $validator, $context ) { $items = fixture_five(); $items[0]['priority'] = -1; $validator->validate( $items, $context ); }, 'priority below zero is rejected' );
-analysis_rejects( static function () use ( $validator, $context ) { $items = fixture_five(); $items[0]['priority'] = 101; $validator->validate( $items, $context ); }, 'priority above 100 is rejected' );
-analysis_rejects( static function () use ( $validator, $context ) { $items = fixture_five(); $items[0]['confidence'] = -0.1; $validator->validate( $items, $context ); }, 'confidence below zero is rejected' );
-analysis_rejects( static function () use ( $validator, $context ) { $items = fixture_five(); $items[0]['confidence'] = 1.1; $validator->validate( $items, $context ); }, 'confidence above one is rejected' );
-analysis_rejects( static function () use ( $validator, $context ) { $items = fixture_five(); $items[0]['content_type'] = 'clinic'; $validator->validate( $items, $context ); }, 'invalid content type is rejected' );
-analysis_rejects( static function () use ( $validator, $context ) { $items = fixture_five(); $items[0]['category'] = 'doorway'; $validator->validate( $items, $context ); }, 'invalid category is rejected' );
-analysis_rejects( static function () use ( $validator, $context ) { $items = fixture_five(); $items[1]['proposed_title'] = $items[0]['proposed_title']; $validator->validate( $items, $context ); }, 'duplicate recommendation titles are rejected' );
-analysis_rejects( static function () use ( $validator, $context ) { $items = fixture_five(); $items[1]['suggested_slug'] = $items[0]['suggested_slug']; $validator->validate( $items, $context ); }, 'duplicate recommendation slugs are rejected' );
-analysis_rejects( static function () use ( $validator, $context ) { $items = fixture_five(); $items[0]['proposed_title'] = 'Recovery Time: Understanding It'; $validator->validate( $items, $context ); }, 'substantial existing-title overlap is rejected' );
+$mixed = fixture_eight();
+$mixed[0]['category'] = 'doorway';
+$mixed[2]['relevant_location_ids'] = array( 'city:invalid' );
+$mixed[5]['proposed_title'] = 'Recovery Time: Understanding It';
+$mixed_selected = $validator->validate( $mixed, $context );
+analysis_expect( array( 'item-2', 'item-4', 'item-5', 'item-7', 'item-8' ) === array_column( $mixed_selected, 'id' ), 'candidates 1, 3, and 6 may fail while the first five valid candidates survive in order' );
+$mixed_diagnostics = $validator->selection_diagnostics();
+analysis_expect( 3 === $mixed_diagnostics['candidates_rejected'] && 1 === $mixed_diagnostics['rejection_rules']['existing_content_overlap'], 'one existing-content overlap no longer invalidates an otherwise sufficient response' );
 
-$valid_refs = fixture_five();
+$overlap_context = $context;
+$overlap_context['existing_content'][] = array( 'id' => 102, 'title' => 'Existing Topic Two', 'slug' => 'existing-topic-two' );
+$overlap_context['existing_content'][] = array( 'id' => 103, 'title' => 'Existing Topic Three', 'slug' => 'existing-topic-three' );
+$multiple_overlaps = fixture_eight();
+$multiple_overlaps[0]['suggested_slug'] = 'understanding-recovery-time';
+$multiple_overlaps[1]['suggested_slug'] = 'existing-topic-two';
+$multiple_overlaps[2]['suggested_slug'] = 'existing-topic-three';
+$overlap_selected = $validator->validate( $multiple_overlaps, $overlap_context );
+analysis_expect( array( 'item-4', 'item-5', 'item-6', 'item-7', 'item-8' ) === array_column( $overlap_selected, 'id' ), 'multiple existing-content overlaps still succeed when five valid candidates survive' );
+analysis_expect( 3 === $validator->selection_diagnostics()['rejection_rules']['existing_content_overlap'], 'multiple overlap rejection count is retained safely' );
+
+$valid_refs = fixture_eight();
 $valid_refs[0]['relevant_clinic_ids'] = array( 10 ); $valid_refs[0]['relevant_doctor_ids'] = array( 20 );
 analysis_expect( 10 === $validator->validate( $valid_refs, $context )[0]['relevant_clinic_ids'][0], 'valid Clinic and Doctor references are accepted' );
-analysis_rejects( static function () use ( $validator, $context ) { $items = fixture_five(); $items[0]['relevant_clinic_ids'] = array( 999 ); $validator->validate( $items, $context ); }, 'invalid Clinic reference is rejected' );
-$reference_diagnostic = analysis_diagnostic( static function () use ( $validator, $context ) { $items = fixture_five(); $items[3]['relevant_location_ids'] = array( 'city:xx:example' ); $validator->validate( $items, $context ); } );
-analysis_expect( 'invalid_location_id' === $reference_diagnostic['validation_rule'] && 4 === $reference_diagnostic['opportunity_index'] && 'item-4' === $reference_diagnostic['opportunity_id'] && 'city:xx:example' === $reference_diagnostic['offending_value'], 'entity failure retains rule, opportunity identity, and bounded normalized identifier' );
-analysis_rejects( static function () use ( $validator, $context ) { $items = fixture_five(); $items[0]['relevant_doctor_ids'] = array( 999 ); $validator->validate( $items, $context ); }, 'invalid Doctor reference is rejected' );
-analysis_rejects( static function () use ( $validator, $context ) { $items = fixture_five(); $items[0]['suggested_internal_link_ids'] = array( 999 ); $validator->validate( $items, $context ); }, 'invalid internal-link ID is rejected' );
-$local = fixture_five(); $local[0]['category'] = 'local'; $local[0]['geo_scope'] = 'Austin'; $local[0]['relevant_location_ids'] = array( 'city:austin' ); $local[0]['relevant_clinic_ids'] = array( 10 );
+$local = fixture_eight(); $local[0]['category'] = 'local'; $local[0]['geo_scope'] = 'Austin'; $local[0]['relevant_location_ids'] = array( 'city:austin' ); $local[0]['relevant_clinic_ids'] = array( 10 );
 analysis_expect( 'city:austin' === $validator->validate( $local, $context )[0]['relevant_location_ids'][0], 'valid local opportunity is grounded in Core context' );
-analysis_rejects( static function () use ( $validator, $context ) { $items = fixture_five(); $items[0]['category'] = 'local'; $items[0]['geo_scope'] = 'Nowhere'; $validator->validate( $items, $context ); }, 'ungrounded local opportunity is rejected' );
 $mismatched_context = $context; $mismatched_context['allowed_entities']['clinic_ids'][] = 11;
-analysis_rejects( static function () use ( $validator, $mismatched_context ) { $items = fixture_five(); $items[0]['category'] = 'local'; $items[0]['geo_scope'] = 'Austin'; $items[0]['relevant_location_ids'] = array( 'city:austin' ); $items[0]['relevant_clinic_ids'] = array( 11 ); $validator->validate( $items, $mismatched_context ); }, 'Clinic outside the referenced location is rejected' );
 
 $rule_cases = array(
-	'invalid_title' => static function () { $items = fixture_five(); $items[0]['proposed_title'] = ''; return $items; },
-	'invalid_slug' => static function () { $items = fixture_five(); $items[0]['suggested_slug'] = ''; return $items; },
-	'invalid_content_type' => static function () { $items = fixture_five(); $items[0]['content_type'] = 'clinic'; return $items; },
-	'invalid_category' => static function () { $items = fixture_five(); $items[0]['category'] = 'doorway'; return $items; },
-	'duplicate_title' => static function () { $items = fixture_five(); $items[1]['proposed_title'] = $items[0]['proposed_title']; return $items; },
-	'duplicate_slug' => static function () { $items = fixture_five(); $items[1]['suggested_slug'] = $items[0]['suggested_slug']; return $items; },
-	'existing_content_overlap' => static function () { $items = fixture_five(); $items[0]['proposed_title'] = 'Recovery Time: Understanding It'; return $items; },
-	'invalid_location_id' => static function () { $items = fixture_five(); $items[0]['relevant_location_ids'] = array( 'city:invalid' ); return $items; },
-	'invalid_clinic_id' => static function () { $items = fixture_five(); $items[0]['relevant_clinic_ids'] = array( 999 ); return $items; },
-	'invalid_doctor_id' => static function () { $items = fixture_five(); $items[0]['relevant_doctor_ids'] = array( 999 ); return $items; },
-	'invalid_internal_link_id' => static function () { $items = fixture_five(); $items[0]['suggested_internal_link_ids'] = array( 999 ); return $items; },
-	'missing_local_grounding' => static function () { $items = fixture_five(); $items[0]['category'] = 'local'; $items[0]['geo_scope'] = 'Austin'; return $items; },
-	'invalid_priority' => static function () { $items = fixture_five(); $items[0]['priority'] = 101; return $items; },
-	'invalid_confidence' => static function () { $items = fixture_five(); $items[0]['confidence'] = 1.1; return $items; },
+	'invalid_title' => static function () { $items = fixture_eight(); $items[0]['proposed_title'] = ''; return $items; },
+	'invalid_slug' => static function () { $items = fixture_eight(); $items[0]['suggested_slug'] = ''; return $items; },
+	'invalid_content_type' => static function () { $items = fixture_eight(); $items[0]['content_type'] = 'clinic'; return $items; },
+	'invalid_category' => static function () { $items = fixture_eight(); $items[0]['category'] = 'doorway'; return $items; },
+	'duplicate_title' => static function () { $items = fixture_eight(); $items[1]['proposed_title'] = $items[0]['proposed_title']; return $items; },
+	'duplicate_slug' => static function () { $items = fixture_eight(); $items[1]['suggested_slug'] = $items[0]['suggested_slug']; return $items; },
+	'existing_content_overlap' => static function () { $items = fixture_eight(); $items[0]['proposed_title'] = 'Recovery Time: Understanding It'; return $items; },
+	'invalid_location_id' => static function () { $items = fixture_eight(); $items[0]['relevant_location_ids'] = array( 'city:invalid' ); return $items; },
+	'invalid_clinic_id' => static function () { $items = fixture_eight(); $items[0]['relevant_clinic_ids'] = array( 999 ); return $items; },
+	'invalid_doctor_id' => static function () { $items = fixture_eight(); $items[0]['relevant_doctor_ids'] = array( 999 ); return $items; },
+	'invalid_internal_link_id' => static function () { $items = fixture_eight(); $items[0]['suggested_internal_link_ids'] = array( 999 ); return $items; },
+	'missing_local_grounding' => static function () { $items = fixture_eight(); $items[0]['category'] = 'local'; $items[0]['geo_scope'] = 'Austin'; return $items; },
+	'invalid_priority' => static function () { $items = fixture_eight(); $items[0]['priority'] = 101; return $items; },
+	'invalid_confidence' => static function () { $items = fixture_eight(); $items[0]['confidence'] = 1.1; return $items; },
 );
 foreach ( $rule_cases as $expected_rule => $fixture ) {
-	$diagnostic = analysis_diagnostic( static function () use ( $validator, $context, $fixture ) { $validator->validate( $fixture(), $context ); } );
-	$expected_index = in_array( $expected_rule, array( 'duplicate_title', 'duplicate_slug' ), true ) ? 2 : 1;
-	analysis_expect( $expected_rule === $diagnostic['validation_rule'] && $expected_index === $diagnostic['opportunity_index'], 'stable diagnostic rule is retained for ' . $expected_rule );
+	analysis_expect( 5 === count( $validator->validate( $fixture(), $context ) ), 'one invalid candidate does not fail selection for ' . $expected_rule );
+	$diagnostic = $validator->selection_diagnostics();
+	analysis_expect( 3 === $diagnostic['candidates_rejected'] && 1 === $diagnostic['rejection_rules'][ $expected_rule ] && 2 === $diagnostic['rejection_rules']['not_selected_after_limit'], 'stable rejection rule is retained for ' . $expected_rule );
 }
-$mismatch_diagnostic = analysis_diagnostic( static function () use ( $validator, $mismatched_context ) { $items = fixture_five(); $items[0]['category'] = 'local'; $items[0]['geo_scope'] = 'Austin'; $items[0]['relevant_location_ids'] = array( 'city:austin' ); $items[0]['relevant_clinic_ids'] = array( 11 ); $validator->validate( $items, $mismatched_context ); } );
-analysis_expect( 'clinic_location_mismatch' === $mismatch_diagnostic['validation_rule'] && '11' === $mismatch_diagnostic['offending_value'], 'Clinic/location mismatch retains its stable rule and bounded Clinic ID' );
+$mismatch = fixture_eight(); $mismatch[0]['category'] = 'local'; $mismatch[0]['geo_scope'] = 'Austin'; $mismatch[0]['relevant_location_ids'] = array( 'city:austin' ); $mismatch[0]['relevant_clinic_ids'] = array( 11 );
+$validator->validate( $mismatch, $mismatched_context );
+analysis_expect( 1 === $validator->selection_diagnostics()['rejection_rules']['clinic_location_mismatch'], 'Clinic/location mismatch is rejected per candidate' );
+
+$insufficient = fixture_eight();
+foreach ( array( 0, 1, 2, 3 ) as $index ) { $insufficient[ $index ]['category'] = 'doorway'; }
+$insufficient_diagnostic = analysis_diagnostic( static function () use ( $validator, $context, $insufficient ) { $validator->validate( $insufficient, $context ); } );
+analysis_expect( 'insufficient_valid_candidates' === $insufficient_diagnostic['validation_rule'] && 4 === $insufficient_diagnostic['candidates_selected'] && 4 === $insufficient_diagnostic['candidates_rejected'], 'fewer than five survivors fails closed with aggregate counts' );
+analysis_expect( 4 === $insufficient_diagnostic['rejection_rules']['invalid_category'], 'aggregate failure retains bounded rejection reasons' );
 
 $builder = new AnalysisContextBuilder( new SiteContextBuilder( new CoreAdapter( static function () { return null; } ), new ContentInventory() ), new AnalysisContentReader(), new CoreAdapter( static function () { return null; } ) );
 analysis_expect( $builder->hash( array( 'b' => 2, 'a' => 1 ) ) === $builder->hash( array( 'a' => 1, 'b' => 2 ) ), 'context hashing is deterministic across associative key order' );

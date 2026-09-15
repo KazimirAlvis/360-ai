@@ -2,7 +2,7 @@
 
 360 AI is the general AI layer for the 360 platform. It is **not** an SEO-only plugin. SEO and GEO/AEO will be modules alongside future content, auditing, internal-linking, image, Search Console, and analytics-assisted workflows.
 
-## Current release: 0.4.1
+## Current release: 0.4.2
 
 The foundation release provides:
 
@@ -12,7 +12,9 @@ The foundation release provides:
 - lightweight Page/Post counts and a bounded reusable content inventory;
 - a structured context builder for future modules.
 
-Version 0.2.0 adds **Content Opportunities**, a human-review workflow that builds bounded, Platform Core-grounded site context and returns exactly five structured recommendations. It does not create or publish Pages, Posts, drafts, images, SEO metadata, or Clinic/Doctor source data.
+**Content Opportunities** is a human-review workflow that builds bounded, Platform Core-grounded site context. Providers return eight ordered candidates; deterministic validation keeps the first five valid recommendations. It does not create or publish normal Pages or Posts, images, or Clinic/Doctor source data.
+
+Version 0.4.2 makes established-site analysis more robust without weakening its safeguards: providers return eight ordered candidates, candidate-level duplicate, cannibalization, entity, and geographic failures are rejected independently, and exactly the first five valid opportunities are retained. Fewer than five valid candidates still fails closed, makes no retry, and saves no recommendations.
 
 ## Content Opportunities
 
@@ -23,7 +25,7 @@ Version 0.2.0 adds **Content Opportunities**, a human-review workflow that build
 - OpenAI and Anthropic credentials are stored independently. `GLOBAL360_AI_OPENAI_API_KEY` and `GLOBAL360_AI_ANTHROPIC_API_KEY` override their respective protected database options.
 - Existing installations continue to select OpenAI by default; administrators may explicitly select Anthropic without losing either saved credential. The Mock provider remains local/test-only.
 - Blank key submissions preserve the saved key; removal requires an explicit checkbox. Keys are never rendered, logged, or stored in analysis history.
-- Validation requires exactly five opportunities, controlled types/categories, existing entity/link IDs, duplicate checks, and Core-grounded local recommendations.
+- Validation requires exactly eight candidates, selects exactly five valid opportunities, enforces controlled types/categories and existing entity/link IDs, rejects duplicates/overlaps per candidate, and requires Core-grounded local recommendations. Fewer than five valid candidates fails closed without saving recommendations.
 - Private option-based history retains ten records with provider/model, context hash, status, token usage, bounded safe diagnostics, errors, and validated recommendations—never credentials, request payloads, raw provider responses, or the full site-analysis context.
 - Recommendations are medical/YMYL topic proposals for later human review. They may not invent facts, studies, efficacy, diagnoses, providers, clinics, or geographic presence.
 

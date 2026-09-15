@@ -51,6 +51,7 @@ final class OpportunityService {
 				'total_tokens' => (int) ( $response->usage['total_tokens'] ?? 0 ),
 			),
 			'error' => '',
+			'diagnostics' => $this->validator->selection_diagnostics(),
 		);
 		$record['analysis_id'] = $this->repository->save( $record );
 		return $record;
@@ -66,12 +67,16 @@ final class OpportunityService {
 				'provider_request_id'    => substr( preg_replace( '/[^A-Za-z0-9_-]/', '', (string) ( $diagnostics['provider_request_id'] ?? '' ) ), 0, 128 ),
 				'failure_stage'          => substr( sanitize_key( (string) ( $diagnostics['failure_stage'] ?? '' ) ), 0, 32 ),
 				'validation_rule'        => substr( sanitize_key( (string) ( $diagnostics['validation_rule'] ?? '' ) ), 0, 64 ),
-				'opportunity_index'      => max( 0, min( 5, (int) ( $diagnostics['opportunity_index'] ?? 0 ) ) ),
+				'opportunity_index'      => max( 0, min( 8, (int) ( $diagnostics['opportunity_index'] ?? 0 ) ) ),
 				'opportunity_id'         => substr( sanitize_key( (string) ( $diagnostics['opportunity_id'] ?? '' ) ), 0, 64 ),
 				'offending_field'        => substr( sanitize_key( (string) ( $diagnostics['offending_field'] ?? '' ) ), 0, 64 ),
 				'offending_value'        => substr( preg_replace( '/[^A-Za-z0-9:._-]/', '', (string) ( $diagnostics['offending_value'] ?? '' ) ), 0, 96 ),
 				'completion_status'      => substr( sanitize_key( (string) ( $diagnostics['completion_status'] ?? '' ) ), 0, 64 ),
 				'stop_reason'            => substr( sanitize_key( (string) ( $diagnostics['stop_reason'] ?? '' ) ), 0, 64 ),
+				'candidates_received'     => max( 0, min( 8, (int) ( $diagnostics['candidates_received'] ?? 0 ) ) ),
+				'candidates_selected'     => max( 0, min( 5, (int) ( $diagnostics['candidates_selected'] ?? 0 ) ) ),
+				'candidates_rejected'     => max( 0, min( 8, (int) ( $diagnostics['candidates_rejected'] ?? 0 ) ) ),
+				'rejection_rules'         => $this->sanitize_rejection_rules( (array) ( $diagnostics['rejection_rules'] ?? array() ) ),
 			);
 		}
 		$this->repository->save( array(
@@ -81,5 +86,12 @@ final class OpportunityService {
 			'error' => sanitize_text_field( $error ),
 			'diagnostics' => $safe_diagnostics,
 		) );
+	}
+
+	/** @return array<string,int> */
+	private function sanitize_rejection_rules( array $rules ): array {
+		$clean = array();
+		foreach ( array_slice( $rules, 0, 8, true ) as $rule => $count ) { $rule = substr( sanitize_key( (string) $rule ), 0, 64 ); if ( '' !== $rule ) { $clean[ $rule ] = max( 0, min( 8, (int) $count ) ); } }
+		ksort( $clean ); return $clean;
 	}
 }

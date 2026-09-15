@@ -23,7 +23,8 @@ final class AnalysisContextBuilder {
 		$context['existing_content'] = $this->content->read();
 		$context['allowed_entities'] = $this->core->analysis_entities();
 		$context['analysis_rules'] = array(
-			'opportunity_count' => 5,
+			'candidate_count'            => 8,
+			'selected_opportunity_count' => 5,
 			'content_types'     => array( 'page', 'post' ),
 			'categories'        => OpportunityValidator::CATEGORIES,
 			'ymyl'              => 'Educational topics only; no diagnosis, efficacy claims, invented studies, or personalized medical advice.',

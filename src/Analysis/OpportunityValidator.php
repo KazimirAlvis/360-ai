@@ -5,11 +5,13 @@ namespace Global360\AI\Analysis;
 final class OpportunityValidator {
 	public const CATEGORIES = array( 'informational', 'treatment', 'symptom', 'comparison', 'local', 'faq_aeo' );
 	private const TYPES = array( 'page', 'post' );
+	private $selection_diagnostics = array();
 
 	/** @return array<int,array<string,mixed>> */
 	public function validate( array $opportunities, array $context ): array {
-		if ( 5 !== count( $opportunities ) ) {
-			$this->fail( 'Analysis must contain exactly five opportunities.', 'opportunity_count', -1, '', 'count', count( $opportunities ) );
+		$this->selection_diagnostics = array();
+		if ( 8 !== count( $opportunities ) ) {
+			$this->fail( 'Analysis must contain exactly eight candidate opportunities.', 'candidate_count', -1, '', 'count', count( $opportunities ) );
 		}
 		$entities = (array) ( $context['allowed_entities'] ?? array() );
 		$clinic_ids = array_map( 'intval', (array) ( $entities['clinic_ids'] ?? array() ) );
@@ -26,9 +28,11 @@ final class OpportunityValidator {
 		$titles = array();
 		$slugs = array();
 		$clean = array();
+		$rejection_rules = array();
 
 		foreach ( $opportunities as $index => $item ) {
-			if ( ! is_array( $item ) ) { $this->fail( 'Opportunity is malformed.', 'malformed_opportunity', $index ); }
+			if ( ! is_array( $item ) ) { $this->fail( 'Opportunity candidate is structurally malformed.', 'malformed_opportunity', $index ); }
+			try {
 			$opportunity_id = sanitize_key( (string) ( $item['id'] ?? '' ) );
 			$title = sanitize_text_field( (string) ( $item['proposed_title'] ?? '' ) );
 			$slug  = sanitize_title( (string) ( $item['suggested_slug'] ?? '' ) );
@@ -46,9 +50,6 @@ final class OpportunityValidator {
 					$this->fail( 'A recommendation substantially overlaps existing content.', 'existing_content_overlap', $index, $opportunity_id, 'existing_content_id', (int) ( $existing_item['id'] ?? 0 ) );
 				}
 			}
-			$titles[ $title_key ] = true;
-			$slugs[ $slug ] = true;
-
 			$locations = $this->validated_strings( $item['relevant_location_ids'] ?? array(), $location_ids, 'location', 'invalid_location_id', $index, $opportunity_id );
 			$clinics = $this->validated_ints( $item['relevant_clinic_ids'] ?? array(), $clinic_ids, 'Clinic', 'invalid_clinic_id', $index, $opportunity_id );
 			$doctors = $this->validated_ints( $item['relevant_doctor_ids'] ?? array(), $doctor_ids, 'Doctor', 'invalid_doctor_id', $index, $opportunity_id );
@@ -70,6 +71,8 @@ final class OpportunityValidator {
 			if ( 0 > $priority || 100 < $priority ) { $this->fail( 'Opportunity priority must be between 0 and 100.', 'invalid_priority', $index, $opportunity_id, 'priority', $priority ); }
 			if ( 0 > $confidence || 1 < $confidence ) { $this->fail( 'Opportunity confidence must be between 0 and 1.', 'invalid_confidence', $index, $opportunity_id, 'confidence', $confidence ); }
 
+			$titles[ $title_key ] = true;
+			$slugs[ $slug ] = true;
 			$clean[] = array(
 				'id' => sanitize_key( (string) ( $item['id'] ?? 'opportunity-' . ( $index + 1 ) ) ),
 				'proposed_title' => $title, 'suggested_slug' => $slug, 'content_type' => $type, 'category' => $category,
@@ -82,9 +85,30 @@ final class OpportunityValidator {
 				'priority' => $priority,
 				'confidence' => $confidence,
 			);
+			} catch ( OpportunityValidationException $error ) {
+				$rule = sanitize_key( (string) ( $error->diagnostics()['validation_rule'] ?? 'candidate_validation' ) );
+				$rejection_rules[ $rule ] = min( 8, (int) ( $rejection_rules[ $rule ] ?? 0 ) + 1 );
+			}
 		}
-		return $clean;
+		$not_selected = max( 0, count( $clean ) - 5 );
+		if ( 0 < $not_selected ) {
+			$rejection_rules['not_selected_after_limit'] = $not_selected;
+		}
+		ksort( $rejection_rules );
+		$this->selection_diagnostics = array(
+			'candidates_received' => 8,
+			'candidates_selected' => min( 5, count( $clean ) ),
+			'candidates_rejected' => 8 - min( 5, count( $clean ) ),
+			'rejection_rules' => array_slice( $rejection_rules, 0, 8, true ),
+		);
+		if ( 5 > count( $clean ) ) {
+			throw new OpportunityValidationException( 'Fewer than five candidate opportunities passed deterministic validation.', array_merge( array( 'failure_stage' => 'validation', 'validation_rule' => 'insufficient_valid_candidates' ), $this->selection_diagnostics ) );
+		}
+		return array_slice( $clean, 0, 5 );
 	}
+
+	/** @return array<string,mixed> */
+	public function selection_diagnostics(): array { return $this->selection_diagnostics; }
 
 	private function validated_ints( $values, array $allowed, string $label, string $rule, int $index, string $opportunity_id ): array {
 		$values = array_values( array_unique( array_map( 'intval', (array) $values ) ) );

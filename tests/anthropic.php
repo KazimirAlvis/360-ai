@@ -91,14 +91,14 @@ $keys->save_for( 'anthropic', 'ignored-fixture' );
 anthropic_expect( 'constant' === $keys->source_for( 'anthropic' ) && 'constant-fixture' === $keys->get_for( 'anthropic' ), 'Anthropic constant wins and cannot be overwritten' );
 
 $provider = new AnthropicProvider( 'request-fixture' );
-$items = array_map( 'anthropic_opportunity', range( 1, 5 ) );
+$items = array_map( 'anthropic_opportunity', range( 1, 8 ) );
 $anthropic_http_response = anthropic_response( 200, array(
 	'model' => 'claude-sonnet-5',
 	'content' => array( array( 'type' => 'text', 'text' => json_encode( array( 'opportunities' => $items ) ) ) ),
 	'usage' => array( 'input_tokens' => 123, 'output_tokens' => 456 ),
 ) );
 $result = $provider->analyze( array( 'bounded' => 'context' ) );
-anthropic_expect( $result->is_success() && 5 === count( $result->opportunities ), 'valid Anthropic structured response is normalized' );
+anthropic_expect( $result->is_success() && 8 === count( $result->opportunities ), 'valid Anthropic eight-candidate structured response is normalized' );
 anthropic_expect( 5 === count( ( new OpportunityValidator() )->validate( $result->opportunities, array() ) ), 'shared deterministic validator accepts valid Anthropic output' );
 anthropic_expect( 123 === $result->usage['input_tokens'] && 456 === $result->usage['output_tokens'] && 579 === $result->usage['total_tokens'], 'Anthropic token usage is extracted without fabrication' );
 anthropic_expect( 'anthropic' === $result->provider && 'claude-sonnet-5' === $result->model, 'Anthropic provenance uses the actual response model' );
@@ -114,7 +114,7 @@ anthropic_expect( array_keys( \Global360\AI\AI\OpportunityRequest::schema()['pro
 anthropic_expect( \Global360\AI\AI\OpportunityRequest::schema()['properties']['opportunities']['items']['required'] === $anthropic_schema['properties']['opportunities']['items']['required'], 'Anthropic schema retains required fields' );
 anthropic_expect( array( 'page', 'post' ) === $anthropic_schema['properties']['opportunities']['items']['properties']['content_type']['enum'], 'Anthropic schema retains supported enums' );
 anthropic_expect( 'integer' === $anthropic_schema['properties']['opportunities']['items']['properties']['priority']['type'] && 'number' === $anthropic_schema['properties']['opportunities']['items']['properties']['confidence']['type'], 'Anthropic schema retains scalar types' );
-anthropic_expect( 5 === \Global360\AI\AI\OpportunityRequest::schema()['properties']['opportunities']['minItems'] && 100 === \Global360\AI\AI\OpportunityRequest::schema()['properties']['opportunities']['items']['properties']['priority']['maximum'], 'canonical OpenAI schema retains stronger constraints' );
+anthropic_expect( 8 === \Global360\AI\AI\OpportunityRequest::schema()['properties']['opportunities']['minItems'] && 8 === \Global360\AI\AI\OpportunityRequest::schema()['properties']['opportunities']['maxItems'] && 100 === \Global360\AI\AI\OpportunityRequest::schema()['properties']['opportunities']['items']['properties']['priority']['maximum'], 'canonical OpenAI schema retains strict eight-candidate constraints' );
 
 $draft_fixture = array( 'title' => 'Educational Topic 1', 'slug' => 'educational-topic-1', 'excerpt' => 'A sufficiently descriptive educational excerpt.', 'content' => '<p>' . str_repeat( 'Educational content for human review. ', 10 ) . '</p>', 'seo_title' => 'Educational Topic 1', 'meta_description' => 'A sufficiently descriptive educational meta description for review.', 'primary_keyphrase' => 'educational topic', 'secondary_keyphrases' => array( 'patient education guide', 'specialist care questions', 'health topic overview' ), 'content_tags' => array( 'Patient Education', 'Specialist Care', 'Treatment Questions' ), 'suggested_internal_link_ids' => array( 101 ) );
 $anthropic_http_response = anthropic_response( 200, array( 'model' => 'claude-sonnet-5', 'stop_reason' => 'end_turn', 'content' => array( array( 'type' => 'text', 'text' => json_encode( $draft_fixture ) ) ), 'usage' => array( 'input_tokens' => 20, 'output_tokens' => 30 ) ) );

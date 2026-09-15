@@ -5,12 +5,14 @@ namespace Global360\AI\AI;
 use Global360\AI\Generation\DraftResponse;
 
 final class MockProvider implements ProviderInterface {
+	public static $analysis_calls = 0;
 	public static $draft_calls = 0;
 	public function name(): string { return 'mock'; }
 	public function model(): string { return 'deterministic-fixture'; }
 	public function is_configured(): bool { return true; }
 
 	public function analyze( array $context ): AnalysisResponse {
+		self::$analysis_calls++;
 		$content = (array) ( $context['existing_content'] ?? array() );
 		$link_ids = array_slice( array_values( array_map( 'intval', array_column( $content, 'id' ) ) ), 0, 2 );
 		$topics = array(
@@ -19,6 +21,9 @@ final class MockProvider implements ProviderInterface {
 			array( 'Treatment Options: Questions, Benefits, and Tradeoffs', 'treatment-options-questions-benefits-tradeoffs', 'post', 'comparison', 'treatment option comparison', 'informational' ),
 			array( 'Frequently Asked Questions About Specialist Care', 'specialist-care-frequently-asked-questions', 'page', 'faq_aeo', 'specialist care FAQ', 'informational' ),
 			array( 'Preparing for Your First Specialist Appointment', 'prepare-first-specialist-appointment', 'post', 'informational', 'appointment preparation', 'informational' ),
+			array( 'Understanding Follow-Up Questions After a Consultation', 'follow-up-questions-after-consultation', 'post', 'informational', 'consultation follow-up questions', 'informational' ),
+			array( 'How to Organize Medical Records for Specialist Care', 'organize-medical-records-specialist-care', 'post', 'informational', 'medical record preparation', 'informational' ),
+			array( 'Questions About Coordinating Care Between Specialists', 'questions-coordinating-care-between-specialists', 'page', 'faq_aeo', 'specialist care coordination', 'informational' ),
 		);
 		$items = array();
 		foreach ( $topics as $index => $topic ) {
