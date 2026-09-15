@@ -2,7 +2,7 @@
 
 360 AI is the general AI layer for the 360 platform. It is **not** an SEO-only plugin. SEO and GEO/AEO will be modules alongside future content, auditing, internal-linking, image, Search Console, and analytics-assisted workflows.
 
-## Current release: 0.4.0
+## Current release: 0.4.1
 
 The foundation release provides:
 
@@ -33,17 +33,25 @@ Draft generation is deliberately not part of 0.2.0. No public endpoint, Clinic/D
 
 Version 0.3.0 added an explicitly human-controlled workflow: every stored opportunity begins pending, an administrator may approve or reject it, and only an approved opportunity can invoke draft generation.
 
-Version 0.4.0 adds a private **Content Drafts** editorial workspace. New provider-generated drafts remain outside normal Pages and Posts until an administrator reviews them and explicitly converts one to its validated intended type. Conversion creates exactly one ordinary WordPress draft, never publishes, and never calls a provider.
+Version 0.4.1 separates the AI-assisted editorial pipeline into two purpose-built workspaces backed by one permanent `g360_content` record: **Content Drafts** for generated work under review, and **Content** for explicitly promoted items ready for the normal draft/pending/published lifecycle. Neither workspace uses normal Pages or Posts.
 
 - Workflow state is stored separately from immutable analysis history and supports only validated transitions between pending, approved, rejected, and draft-created states.
+- Content Opportunities is an actionable queue with Active, Published, Rejected, Superseded, and All views. The newest successful five-opportunity analysis is current; untouched pending recommendations from older successful analyses are derived as Superseded without mutating or deleting history. Published Content, explicit rejection, and meaningful in-progress work take precedence over supersession. Published is derived from the associated `g360_content` post's current WordPress status; unpublishing or trashing Content with established workflow provenance returns it to Active.
 - OpenAI and Anthropic share one structured draft contract; Anthropic receives its established provider-safe schema transformation, while `MockProvider` supports deterministic local testing without paid requests.
 - Deterministic validation accepts only attribute-free `p`, `h2`, `h3`, `ul`, `ol`, `li`, `strong`, and `em` markup. Links remain suggestions by validated post ID rather than provider-authored `<a>` elements. All other tags and all attributes—including classes, styles, IDs, event handlers, and provider URLs—remain fail-closed and reject the draft instead of being silently stripped.
 - A request-local generation context includes only the approved opportunity, relevant site context, explicitly referenced content links, and referenced Core entities/locations.
-- Duplicate lookup and atomic generation/conversion locks prevent double-click or concurrent duplicate drafts and provider calls.
-- Draft provenance, token usage, SEO title/description suggestions, and validated internal-link suggestions use private `_global360_ai_*` metadata on the Content Draft and resulting WordPress draft.
-- Editors can revise the Content Draft title, final slug, excerpt, content, SEO title, and meta description before conversion. The final Page/Post URL comes exclusively from normal WordPress routing and has no Content Draft prefix.
-- On conversion, the reviewed SEO title and description are copied to the installed SEOPress contract (`_seopress_titles_title` and `_seopress_titles_desc`). SEOPress remains optional; conversion still succeeds while retaining private SEO provenance when it is unavailable.
-- Clinic, Doctor, relationship, and location records remain read-only inputs owned by Platform Core/API Sync. Generation writes only a private Content Draft; explicit conversion writes one normal Page/Post draft.
+- Duplicate lookup and an atomic generation lock prevent double-click or concurrent duplicate drafts and provider calls.
+- Provenance, token usage, SEO suggestions, and validated internal-link suggestions remain in private `_global360_ai_*` metadata on Content.
+- Content Drafts keep the intended slug and generated SEO suggestions in private editorial fields. They have no public route, public REST record, canonical, or sitemap entry.
+- A nonce- and capability-protected **Move to Content** action promotes the same record idempotently. It creates no copy, publishes nothing, and makes no provider request.
+- Generation retains one primary and two-to-four secondary target keyphrases as private editorial provenance. Promotion initializes SEOPress's canonical title, description, Target Keywords, Open Graph, and X title/description fields from the reviewed draft values. The normal SEOPress editor is the editable SEO source of truth in Content, and later human edits are never overwritten by repeated promotion.
+- Published Content uses a clean root-level URL with no CPT base. Existing public Page, Post, and CPT routes are reserved, collision promotion/publication fails closed, and normal Page/Post routing is unchanged.
+- Only promoted, published Content is public and included in SEOPress XML sitemap handling.
+- Published Content is also included in the same bounded existing-content context used by future analysis and deterministic overlap checks. Draft, pending, private, and trashed Content is excluded so unfinished work does not suppress valid recommendations.
+- Content uses a dedicated non-public `g360_content_tag` taxonomy, separate from normal Post Tags. New drafts receive three to six validated provider-suggested Content Tags, editors control the live term assignments, and the original suggestions remain private provenance. Only bounded tags attached to published Content enter future analysis context; Content Tag archives, rewrites, and taxonomy sitemaps remain disabled.
+- Content Tags remain private editorial and analysis metadata and are not rendered on public Content pages. The scoped Content stylesheet presents the active theme's existing Related Articles list in three desktop columns, two tablet columns, and one mobile column without changing its selection logic.
+- The opportunity's Page/Post suggestion remains provenance only. Promotion and publication never convert or copy Content into a normal Page or Post.
+- Clinic, Doctor, relationship, and location records remain read-only inputs owned by Platform Core/API Sync. Generation writes only to the dedicated Content type.
 - Provider and validation failures leave the opportunity approved, create no post, perform no automatic retry, and retain only bounded sanitized diagnostics. A private, 20-entry-per-opportunity attempt history records provider/model, token usage, status, and structural validation names such as rejected tags or attributes, never prompts, context, generated prose, credentials, or raw responses.
 
 ## Architecture
@@ -70,4 +78,4 @@ php tests/anthropic.php
 php tests/draft-generation.php
 ```
 
-Run `tests/local-integration.php`, `tests/local-analysis.php`, and `tests/local-draft-generation.php` only against a local development WordPress installation. The draft-generation harness creates and removes a disposable draft and restores its test workflow/history state.
+Run `tests/local-integration.php`, `tests/local-analysis.php`, `tests/local-opportunity-lifecycle.php`, and `tests/local-draft-generation.php` only against a local development WordPress installation. The lifecycle and draft-generation harnesses create and remove disposable Content records and restore their test workflow/history state.

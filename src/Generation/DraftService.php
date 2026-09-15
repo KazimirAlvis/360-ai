@@ -49,9 +49,11 @@ final class DraftService {
 			}
 			$post_id = wp_insert_post( array(
 				'post_status' => 'draft', 'post_type' => ContentDraftPostType::POST_TYPE, 'post_author' => $author_id,
-				'post_title' => $draft['title'], 'post_excerpt' => $draft['excerpt'], 'post_content' => $draft['content'],
+				'post_title' => $draft['title'], 'post_name' => '', 'post_excerpt' => $draft['excerpt'], 'post_content' => $draft['content'],
 			), true );
 			if ( is_wp_error( $post_id ) || 1 > (int) $post_id ) { throw new \RuntimeException( 'WordPress could not create the draft.' ); }
+			$terms = wp_set_object_terms( (int) $post_id, $draft['content_tags'], ContentDraftPostType::TAXONOMY, false );
+			if ( is_wp_error( $terms ) ) { wp_delete_post( (int) $post_id, true ); throw new \RuntimeException( 'WordPress could not assign Content Tags.' ); }
 			$meta = array(
 				'_global360_ai_analysis_id' => $analysis_id,
 				'_global360_ai_opportunity_id' => $opportunity_id,
@@ -61,6 +63,9 @@ final class DraftService {
 				'_global360_ai_plugin_version' => defined( 'GLOBAL360_AI_VERSION' ) ? GLOBAL360_AI_VERSION : '',
 				'_global360_ai_seo_title' => $draft['seo_title'],
 				'_global360_ai_meta_description' => $draft['meta_description'],
+				'_global360_ai_target_keyphrases' => $draft['target_keyphrases'],
+				'_global360_ai_generated_target_keyphrases' => $draft['target_keyphrases'],
+				'_global360_ai_generated_content_tags' => $draft['content_tags'],
 				'_global360_ai_intended_post_type' => (string) $opportunity['content_type'],
 				'_global360_ai_final_slug' => $draft['slug'],
 				'_global360_ai_suggested_internal_link_ids' => $draft['suggested_internal_link_ids'],

@@ -10,7 +10,7 @@ final class AnalysisContentReader {
 	public function read(): array {
 		$ids = get_posts(
 			array(
-				'post_type'      => array( 'page', 'post' ),
+				'post_type'      => array( 'page', 'post', 'g360_content' ),
 				'post_status'    => 'publish',
 				'posts_per_page' => self::MAX_ITEMS,
 				'fields'         => 'ids',
@@ -23,7 +23,7 @@ final class AnalysisContentReader {
 		$items = array();
 		foreach ( $ids as $id ) {
 			$post = get_post( $id );
-			if ( ! $post instanceof \WP_Post || 'publish' !== $post->post_status || ! in_array( $post->post_type, array( 'page', 'post' ), true ) ) {
+			if ( ! $post instanceof \WP_Post || 'publish' !== $post->post_status || ! in_array( $post->post_type, array( 'page', 'post', 'g360_content' ), true ) ) {
 				continue;
 			}
 			$text = wp_strip_all_tags( strip_shortcodes( (string) $post->post_content ), true );
@@ -46,6 +46,11 @@ final class AnalysisContentReader {
 
 	/** @return array<string,array<int,string>> */
 	private function terms( int $post_id ): array {
+		$post_type = get_post_type( $post_id );
+		if ( 'g360_content' === $post_type ) {
+			$terms = wp_get_post_terms( $post_id, 'g360_content_tag', array( 'fields' => 'names' ) );
+			return array( 'categories' => array(), 'tags' => is_wp_error( $terms ) ? array() : array_slice( array_values( array_map( 'sanitize_text_field', $terms ) ), 0, 6 ) );
+		}
 		$result = array( 'categories' => array(), 'tags' => array() );
 		foreach ( array( 'category' => 'categories', 'post_tag' => 'tags' ) as $taxonomy => $key ) {
 			$terms = wp_get_post_terms( $post_id, $taxonomy, array( 'fields' => 'names' ) );

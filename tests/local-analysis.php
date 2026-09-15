@@ -63,7 +63,9 @@ ai_analysis_integration_expect( ! empty( $admins ), 'administrator exists for Co
 wp_set_current_user( (int) $admins[0] );
 $page = new ContentOpportunitiesPage( $service, $repository, $keys );
 ob_start(); $page->render(); $html = ob_get_clean();
-ai_analysis_integration_expect( 5 === substr_count( $html, '<div class="card">' ), 'Content Opportunities UI displays exactly five cards' );
+$active_records = array_filter( $page->records_for_view( 'active' ), static function ( $entry ) use ( $record ) { return ( $record['analysis_id'] ?? '' ) === ( $entry['analysis_id'] ?? '' ); } );
+ai_analysis_integration_expect( 5 === count( $active_records ) && 5 <= substr_count( $html, '<div class="card">' ), 'Content Opportunities Active queue includes all five recommendations from the new analysis' );
+foreach ( $record['opportunities'] as $opportunity ) { ai_analysis_integration_expect( false !== strpos( $html, esc_html( $opportunity['proposed_title'] ) ), 'Active queue renders recommendation ' . $opportunity['id'] ); }
 ai_analysis_integration_expect( false === strpos( $html, 'secret-value' ) && false !== strpos( $html, 'type="password"' ), 'admin UI never renders an API key and uses a password field' );
 ai_analysis_integration_expect( false === strpos( $html, 'Generate Draft' ), 'Content Opportunities UI exposes no draft-generation action' );
 

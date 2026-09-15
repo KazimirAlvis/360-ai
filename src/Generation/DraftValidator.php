@@ -6,7 +6,7 @@ final class DraftValidator {
 	private const MIN_CONTENT = 200;
 	private const MIN_PAGE_WORDS = 450;
 	private const MAX_CONTENT = 20000;
-	private const ALLOWED_KEYS = array( 'title', 'slug', 'excerpt', 'content', 'seo_title', 'meta_description', 'suggested_internal_link_ids' );
+	private const ALLOWED_KEYS = array( 'title', 'slug', 'excerpt', 'content', 'seo_title', 'meta_description', 'primary_keyphrase', 'secondary_keyphrases', 'content_tags', 'suggested_internal_link_ids' );
 	private const ALLOWED_HTML = array( 'p', 'h2', 'h3', 'ul', 'ol', 'li', 'strong', 'em' );
 	private const UNSAFE_HTML = array( 'script', 'iframe', 'form', 'input', 'button', 'object', 'embed', 'style', 'svg', 'video', 'audio', 'canvas' );
 
@@ -21,6 +21,18 @@ final class DraftValidator {
 		$content = trim( (string) ( $draft['content'] ?? '' ) );
 		$seo_title = sanitize_text_field( $this->normalize_plain_text( (string) ( $draft['seo_title'] ?? '' ) ) );
 		$meta_description = sanitize_textarea_field( $this->normalize_plain_text( (string) ( $draft['meta_description'] ?? '' ) ) );
+		$primary_keyphrase = $this->validate_keyphrase( $draft['primary_keyphrase'] ?? null );
+		$secondary_values = $draft['secondary_keyphrases'] ?? null;
+		if ( ! is_array( $secondary_values ) || 2 > count( $secondary_values ) || 4 < count( $secondary_values ) ) { throw new \InvalidArgumentException( 'Draft must contain two to four secondary target keyphrases.' ); }
+		$secondary_keyphrases = array_map( array( $this, 'validate_keyphrase' ), $secondary_values );
+		$keyphrases = array_merge( array( $primary_keyphrase ), $secondary_keyphrases );
+		$normalized_keyphrases = array_map( static function ( $phrase ) { return strtolower( remove_accents( $phrase ) ); }, $keyphrases );
+		if ( count( $normalized_keyphrases ) !== count( array_unique( $normalized_keyphrases ) ) ) { throw new \InvalidArgumentException( 'Draft target keyphrases must be unique.' ); }
+		$tag_values = $draft['content_tags'] ?? null;
+		if ( ! is_array( $tag_values ) || 3 > count( $tag_values ) || 6 < count( $tag_values ) ) { throw new \InvalidArgumentException( 'Draft must contain three to six Content Tags.' ); }
+		$content_tags = array_map( array( $this, 'validate_content_tag' ), $tag_values );
+		$normalized_tags = array_map( static function ( $tag ) { return strtolower( remove_accents( $tag ) ); }, $content_tags );
+		if ( count( $normalized_tags ) !== count( array_unique( $normalized_tags ) ) ) { throw new \InvalidArgumentException( 'Draft Content Tags must be unique.' ); }
 		if ( '' === $title ) { throw new \InvalidArgumentException( 'Draft title is required.' ); }
 		if ( '' === $raw_slug || $slug !== $raw_slug ) { throw new \InvalidArgumentException( 'Draft slug is invalid.' ); }
 		if ( '' === $excerpt ) { throw new \InvalidArgumentException( 'Draft excerpt is required.' ); }
@@ -52,8 +64,35 @@ final class DraftValidator {
 			'title' => $title, 'slug' => $slug, 'excerpt' => $excerpt, 'content' => $clean_content,
 			'seo_title' => substr( $seo_title, 0, 200 ),
 			'meta_description' => substr( $meta_description, 0, 320 ),
+			'primary_keyphrase' => $primary_keyphrase,
+			'secondary_keyphrases' => $secondary_keyphrases,
+			'target_keyphrases' => $keyphrases,
+			'content_tags' => $content_tags,
 			'suggested_internal_link_ids' => $link_ids,
 		);
+	}
+
+	private function validate_content_tag( $value ): string {
+		if ( ! is_string( $value ) ) { throw new \InvalidArgumentException( 'Draft Content Tag must be a string.' ); }
+		if ( preg_match( '/[<>]/', $value ) ) { throw new \InvalidArgumentException( 'Draft Content Tag is malformed or outside the allowed bounds.' ); }
+		$tag = sanitize_text_field( preg_replace( '/\s+/', ' ', trim( $this->normalize_plain_text( $value ) ) ) );
+		$length = function_exists( 'mb_strlen' ) ? mb_strlen( $tag ) : strlen( $tag );
+		$words = preg_split( '/\s+/', $tag, -1, PREG_SPLIT_NO_EMPTY );
+		if ( 2 > $length || 60 < $length || 1 > count( $words ?: array() ) || 6 < count( $words ?: array() ) || ! preg_match( '/^[\p{L}\p{N}][\p{L}\p{N}\s\x{2019}\x{27}&+\/-]*$/u', $tag ) || in_array( strtolower( $tag ), array( 'health', 'medical' ), true ) ) {
+			throw new \InvalidArgumentException( 'Draft Content Tag is malformed or outside the allowed bounds.' );
+		}
+		return $tag;
+	}
+
+	private function validate_keyphrase( $value ): string {
+		if ( ! is_string( $value ) ) { throw new \InvalidArgumentException( 'Draft target keyphrase must be a string.' ); }
+		$phrase = sanitize_text_field( $this->normalize_plain_text( $value ) );
+		$length = function_exists( 'mb_strlen' ) ? mb_strlen( $phrase ) : strlen( $phrase );
+		$words = preg_split( '/\s+/', trim( $phrase ), -1, PREG_SPLIT_NO_EMPTY );
+		if ( 2 > $length || 80 < $length || 1 > count( $words ?: array() ) || 8 < count( $words ?: array() ) || ! preg_match( '/^[\p{L}\p{N}][\p{L}\p{N}\s\x{2019}\x{27}&+\/-]*$/u', $phrase ) ) {
+			throw new \InvalidArgumentException( 'Draft target keyphrase is malformed or outside the allowed bounds.' );
+		}
+		return $phrase;
 	}
 
 	private function validate_internal_meta_content( string $content ): void {

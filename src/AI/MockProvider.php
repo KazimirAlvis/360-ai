@@ -56,6 +56,9 @@ final class MockProvider implements ProviderInterface {
 			'content' => $content,
 			'seo_title' => (string) ( $opportunity['proposed_title'] ?? '' ),
 			'meta_description' => 'Review general educational information and questions to discuss with a qualified healthcare professional.',
+			'primary_keyphrase' => (string) ( $opportunity['target_topic'] ?? 'specialist care questions' ),
+			'secondary_keyphrases' => array( 'specialist appointment preparation', 'questions for a specialist', 'healthcare consultation guide' ),
+			'content_tags' => array( 'Specialist Care', 'Patient Education', 'Treatment Questions', 'Appointment Preparation' ),
 			'suggested_internal_link_ids' => $links,
 		), $this->name(), $this->model(), array( 'input_tokens' => 0, 'output_tokens' => 0, 'total_tokens' => 0 ) );
 	}

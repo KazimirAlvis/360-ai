@@ -75,6 +75,9 @@ final class ContentOpportunitiesPage {
 	public function render(): void {
 		if ( ! current_user_can( AdminPage::CAPABILITY ) ) { wp_die( esc_html__( 'You do not have permission to access 360 AI.', '360-ai' ) ); }
 		$latest = $this->repository->latest();
+		$view = isset( $_GET['opportunity_view'] ) ? sanitize_key( wp_unslash( $_GET['opportunity_view'] ) ) : 'active';
+		if ( ! in_array( $view, array( 'active', 'published', 'rejected', 'superseded', 'all' ), true ) ) { $view = 'active'; }
+		$view_records = $this->records_for_view( $view );
 		?>
 		<div class="wrap"><h1><?php echo esc_html__( 'Content Opportunities', '360-ai' ); ?></h1>
 		<p><?php echo esc_html__( 'Analyze published site context, review each recommendation, and generate a WordPress draft only after explicit approval. Generated drafts are never published automatically.', '360-ai' ); ?></p>
@@ -95,20 +98,25 @@ final class ContentOpportunitiesPage {
 			<input type="hidden" name="action" value="global360_ai_analyze"><?php wp_nonce_field( 'global360_ai_analyze' ); ?>
 			<?php submit_button( __( 'Analyze Site', '360-ai' ), 'primary', 'submit', false ); ?>
 		</form>
-		<?php if ( is_array( $latest ) ) : ?>
+		<?php if ( is_array( $latest ) && 'failed' === ( $latest['status'] ?? '' ) ) : ?>
 			<h2><?php echo esc_html__( 'Latest Analysis', '360-ai' ); ?></h2>
 			<p><?php echo esc_html( sprintf( __( 'Provider: %1$s · Model: %2$s · Context: %3$s', '360-ai' ), (string) $latest['provider'], (string) $latest['model'], substr( (string) $latest['context_hash'], 0, 12 ) ) ); ?></p>
-			<div class="global360-ai-opportunities">
-			<?php foreach ( (array) ( $latest['opportunities'] ?? array() ) as $item ) : $state = $this->workflow ? $this->workflow->get( (string) $latest['analysis_id'], (string) $item['id'] ) : array( 'status' => 'pending', 'draft_post_id' => 0 ); ?>
+			<?php $this->render_analysis_failure( $latest ); ?>
+		<?php endif; ?>
+		<h2><?php echo esc_html__( 'Opportunity Queue', '360-ai' ); ?></h2>
+		<?php $this->render_views( $view ); ?>
+		<div class="global360-ai-opportunities">
+			<?php foreach ( $view_records as $entry ) : $item = $entry['opportunity']; $state = $entry['state']; ?>
 				<div class="card"><h3><?php echo esc_html( (string) $item['proposed_title'] ); ?></h3>
 				<p><strong><?php echo esc_html( strtoupper( (string) $item['content_type'] ) . ' · ' . (string) $item['category'] . ' · ' . (string) $item['search_intent'] ); ?></strong></p>
 				<p><?php echo esc_html( (string) $item['rationale'] ); ?></p>
 				<p><?php echo esc_html( sprintf( __( 'Audience: %1$s · GEO: %2$s · Priority: %3$d · Confidence: %4$s', '360-ai' ), (string) $item['audience'], (string) $item['geo_scope'], (int) $item['priority'], (string) $item['confidence'] ) ); ?></p>
 				<p><?php echo esc_html( sprintf( __( 'Locations: %1$s · Clinics: %2$s · Doctors: %3$s · Internal links: %4$s', '360-ai' ), implode( ', ', $item['relevant_location_ids'] ), implode( ', ', $item['relevant_clinic_ids'] ), implode( ', ', $item['relevant_doctor_ids'] ), implode( ', ', $item['suggested_internal_link_ids'] ) ) ); ?></p>
-				<?php $this->workflow_controls( (string) $latest['analysis_id'], (string) $item['id'], $state ); ?>
+				<?php $this->workflow_controls( (string) $entry['analysis_id'], (string) $item['id'], $state, (string) $entry['classification'] ); ?>
 				</div>
-			<?php endforeach; ?></div>
-		<?php endif; ?></div>
+			<?php endforeach; ?>
+			<?php if ( empty( $view_records ) ) : ?><p><?php echo esc_html__( 'No opportunities found in this view.', '360-ai' ); ?></p><?php endif; ?>
+		</div></div>
 		<?php
 	}
 
@@ -125,7 +133,26 @@ final class ContentOpportunitiesPage {
 	private function safe_error( string $message ): string {
 		$allowed = array( '360 Platform Core is required for site analysis.', 'OpenAI is selected but no OpenAI API key is configured.', 'Anthropic is selected but no Anthropic API key is configured.', 'The provider request failed.', 'The provider returned an HTTP error.', 'The provider returned invalid structured output.', 'The Anthropic request failed.', 'Anthropic authentication failed.', 'Anthropic rate limit exceeded.', 'Anthropic returned an HTTP error.', 'Anthropic returned invalid structured output.' );
 		if ( preg_match( '/^Anthropic request failed \(HTTP [1-5][0-9]{2}(?:: [a-z0-9_-]{1,64})?\)\.$/', $message ) ) { return $message; }
-		return in_array( $message, $allowed, true ) ? $message : 'Analysis failed validation. No recommendations were saved.';
+		return in_array( $message, $allowed, true ) ? $message : 'Analysis failed deterministic validation. No recommendations were saved. Review Latest Analysis for the sanitized diagnostic.';
+	}
+
+	/** @param array<string,mixed> $record */
+	private function render_analysis_failure( array $record ): void {
+		if ( 'failed' !== ( $record['status'] ?? '' ) ) { return; }
+		$diagnostics = is_array( $record['diagnostics'] ?? null ) ? $record['diagnostics'] : array();
+		$rule = sanitize_key( (string) ( $diagnostics['validation_rule'] ?? '' ) );
+		if ( '' === $rule ) {
+			echo '<p><strong>' . esc_html__( 'Analysis failed.', '360-ai' ) . '</strong> ' . esc_html__( 'No additional diagnostic details were retained for this historical attempt.', '360-ai' ) . '</p>';
+			return;
+		}
+		$parts = array( 'Validation failed', $rule );
+		if ( ! empty( $diagnostics['opportunity_id'] ) ) { $parts[] = 'Opportunity ' . sanitize_key( (string) $diagnostics['opportunity_id'] ); }
+		elseif ( ! empty( $diagnostics['opportunity_index'] ) ) { $parts[] = 'Opportunity ' . (int) $diagnostics['opportunity_index']; }
+		if ( ! empty( $diagnostics['offending_field'] ) ) {
+			$value = (string) ( $diagnostics['offending_value'] ?? '' );
+			$parts[] = sanitize_key( (string) $diagnostics['offending_field'] ) . ( '' !== $value ? ': ' . $value : '' );
+		}
+		echo '<p><strong>' . esc_html( implode( ' — ', $parts ) ) . '</strong></p>';
 	}
 
 	private function key_fields( string $provider, string $label, string $constant ): void {
@@ -141,13 +168,21 @@ final class ContentOpportunitiesPage {
 		<?php
 	}
 
-	private function workflow_controls( string $analysis_id, string $opportunity_id, array $state ): void {
+	private function workflow_controls( string $analysis_id, string $opportunity_id, array $state, string $classification ): void {
+		if ( 'superseded' === $classification ) {
+			echo '<p><strong>' . esc_html__( 'Superseded', '360-ai' ) . '</strong> ' . esc_html__( 'A newer successful analysis replaced this untouched recommendation.', '360-ai' ) . '</p>';
+			return;
+		}
 		$status = (string) ( $state['status'] ?? 'pending' );
 		if ( 'draft_created' === $status ) {
 			$draft_id = (int) ( $state['draft_post_id'] ?? 0 );
 			$link = get_edit_post_link( $draft_id, '' );
-			echo '<p><strong>' . esc_html__( 'Draft Created', '360-ai' ) . '</strong> ';
-			if ( $link ) { $label = 'g360_content' === get_post_type( $draft_id ) ? 'Edit Content Draft' : 'Edit Draft'; echo '<a class="button button-primary" href="' . esc_url( $link ) . '">' . esc_html__( $label, '360-ai' ) . '</a>'; }
+			$published = $this->is_published_content( $draft_id );
+			$promoted = $draft_id && metadata_exists( 'post', $draft_id, '_global360_ai_promoted_at' );
+			$label = $published ? 'Published' : ( $promoted ? 'Content — Unpublished' : ( 'trash' === get_post_status( $draft_id ) ? 'Associated Content Trashed' : 'Content Draft Created' ) );
+			echo '<p><strong>' . esc_html( $label ) . '</strong> ';
+			if ( $link ) { echo '<a class="button button-primary" href="' . esc_url( $link ) . '">' . esc_html( $published || $promoted ? 'Edit Content' : 'Edit Content Draft' ) . '</a>'; }
+			if ( $published ) { echo ' <a class="button" href="' . esc_url( get_permalink( $draft_id ) ) . '">' . esc_html__( 'View Content', '360-ai' ) . '</a>'; }
 			echo '</p>'; return;
 		}
 		echo '<p><strong>' . esc_html( ucfirst( $status ) ) . '</strong></p>';
@@ -156,6 +191,60 @@ final class ContentOpportunitiesPage {
 		$this->action_form( 'global360_ai_opportunity_workflow', $analysis_id, $opportunity_id, 'approve', __( 'Approve', '360-ai' ) );
 		$this->action_form( 'global360_ai_opportunity_workflow', $analysis_id, $opportunity_id, 'reject', __( 'Reject', '360-ai' ) );
 	}
+
+	/** @return array<int,array<string,mixed>> */
+	public function records_for_view( string $view ): array {
+		$view = in_array( $view, array( 'active', 'published', 'rejected', 'superseded', 'all' ), true ) ? $view : 'active';
+		$records = array();
+		$latest_success_id = $this->latest_successful_analysis_id();
+		foreach ( $this->repository->all() as $analysis ) {
+			if ( ! is_array( $analysis ) || 'success' !== ( $analysis['status'] ?? '' ) ) { continue; }
+			$analysis_id = (string) ( $analysis['analysis_id'] ?? '' );
+			foreach ( (array) ( $analysis['opportunities'] ?? array() ) as $opportunity ) {
+				if ( ! is_array( $opportunity ) ) { continue; }
+				$state = $this->workflow ? $this->workflow->get( $analysis_id, (string) ( $opportunity['id'] ?? '' ) ) : array( 'status' => 'pending', 'draft_post_id' => 0 );
+				$classification = $this->classify( $analysis_id, $latest_success_id, $state );
+				$include = 'all' === $view || $classification === $view;
+				if ( $include ) { $records[] = array( 'analysis_id' => $analysis_id, 'analysis' => $analysis, 'opportunity' => $opportunity, 'state' => $state, 'classification' => $classification ); }
+			}
+		}
+		return $records;
+	}
+
+	private function latest_successful_analysis_id(): string {
+		foreach ( $this->repository->all() as $analysis ) {
+			if ( is_array( $analysis ) && 'success' === ( $analysis['status'] ?? '' ) && 5 === count( (array) ( $analysis['opportunities'] ?? array() ) ) ) {
+				return (string) ( $analysis['analysis_id'] ?? '' );
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Derive one mutually exclusive queue state without mutating immutable analysis history.
+	 * Unknown historical workflow states are conservatively retained as Active.
+	 *
+	 * @param array<string,mixed> $state
+	 */
+	private function classify( string $analysis_id, string $latest_success_id, array $state ): string {
+		if ( $this->is_published_content( (int) ( $state['draft_post_id'] ?? 0 ) ) ) { return 'published'; }
+		$status = (string) ( $state['status'] ?? 'pending' );
+		if ( 'rejected' === $status ) { return 'rejected'; }
+		if ( 'pending' !== $status ) { return 'active'; }
+		if ( '' === $latest_success_id ) { return 'active'; }
+		return $analysis_id === $latest_success_id ? 'active' : 'superseded';
+	}
+
+	private function render_views( string $current ): void {
+		$links = array();
+		foreach ( array( 'active' => 'Active', 'published' => 'Published', 'rejected' => 'Rejected', 'superseded' => 'Superseded', 'all' => 'All' ) as $view => $label ) {
+			$url = add_query_arg( array( 'page' => self::SLUG, 'opportunity_view' => $view ), admin_url( 'admin.php' ) );
+			$links[] = '<a' . ( $current === $view ? ' class="current" aria-current="page"' : '' ) . ' href="' . esc_url( $url ) . '">' . esc_html( $label ) . ' <span class="count">(' . count( $this->records_for_view( $view ) ) . ')</span></a>';
+		}
+		echo '<nav class="subsubsub">' . implode( ' | ', $links ) . '</nav><br class="clear">';
+	}
+
+	private function is_published_content( int $post_id ): bool { return 0 < $post_id && 'g360_content' === get_post_type( $post_id ) && 'publish' === get_post_status( $post_id ); }
 
 	private function action_form( string $action, string $analysis_id, string $opportunity_id, string $intent, string $label, string $nonce_prefix = 'global360_ai_workflow_' ): void {
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="display:inline-block;margin-right:6px">';
@@ -172,6 +261,6 @@ final class ContentOpportunitiesPage {
 		if ( 'analysis_failed' === $status ) { echo '<div class="notice notice-error"><p>' . esc_html( (string) ( $_GET['global360_ai_error'] ?? __( 'Analysis failed.', '360-ai' ) ) ) . '</p></div>'; }
 		if ( 'workflow_updated' === $status ) { echo '<div class="notice notice-success"><p>' . esc_html__( 'Opportunity workflow updated.', '360-ai' ) . '</p></div>'; }
 		if ( 'workflow_failed' === $status || 'draft_failed' === $status ) { echo '<div class="notice notice-error"><p>' . esc_html( (string) ( $_GET['global360_ai_error'] ?? __( 'Workflow action failed.', '360-ai' ) ) ) . '</p></div>'; }
-		if ( 'draft_created' === $status ) { echo '<div class="notice notice-success"><p>' . esc_html__( 'Draft created for human editorial review. It was not published.', '360-ai' ) . '</p></div>'; }
+		if ( 'draft_created' === $status ) { echo '<div class="notice notice-success"><p>' . esc_html__( 'Content draft created for human editorial and SEO review. It was not published.', '360-ai' ) . '</p></div>'; }
 	}
 }

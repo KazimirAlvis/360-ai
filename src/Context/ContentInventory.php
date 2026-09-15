@@ -8,6 +8,7 @@ final class ContentInventory {
 		return array(
 			'pages' => $this->published_count( 'page' ),
 			'posts' => $this->published_count( 'post' ),
+			'content' => $this->published_count( 'g360_content' ),
 		);
 	}
 
@@ -17,7 +18,7 @@ final class ContentInventory {
 	 * @return array<int,array<string,mixed>>
 	 */
 	public function items( string $post_type, int $limit = 50, int $offset = 0 ): array {
-		if ( ! in_array( $post_type, array( 'page', 'post' ), true ) ) {
+		if ( ! in_array( $post_type, array( 'page', 'post', 'g360_content' ), true ) ) {
 			return array();
 		}
 
@@ -40,7 +41,7 @@ final class ContentInventory {
 			if ( ! is_object( $post ) ) {
 				continue;
 			}
-			$items[] = array(
+			$item = array(
 				'id'       => (int) $post->ID,
 				'post_type'=> (string) $post->post_type,
 				'title'    => (string) $post->post_title,
@@ -48,6 +49,8 @@ final class ContentInventory {
 				'permalink'=> get_permalink( (int) $post->ID ),
 				'modified' => (string) $post->post_modified_gmt,
 			);
+			if ( 'g360_content' === $post_type ) { $terms = wp_get_post_terms( (int) $post->ID, 'g360_content_tag', array( 'fields' => 'names' ) ); $item['tags'] = is_wp_error( $terms ) ? array() : array_slice( array_values( array_map( 'sanitize_text_field', $terms ) ), 0, 6 ); }
+			$items[] = $item;
 		}
 
 		return $items;
