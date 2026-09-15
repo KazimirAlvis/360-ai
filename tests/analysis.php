@@ -205,5 +205,9 @@ analysis_expect( false === strpos( $analysis_sources, 'wp_insert_post' ), 'oppor
 analysis_expect( ! preg_match( '/\b(?:add|update|delete)_post_meta\s*\(/', $analysis_sources ), 'opportunity analysis contains no Clinic/Doctor or SEOPress metadata writes' );
 $admin_source = file_get_contents( dirname( __DIR__ ) . '/src/Admin/ContentOpportunitiesPage.php' );
 analysis_expect( false !== strpos( $admin_source, 'current_user_can' ) && false !== strpos( $admin_source, 'check_admin_referer' ), 'analysis actions enforce capability and nonce protection' );
+$admin_css = file_get_contents( dirname( __DIR__ ) . '/assets/admin.css' );
+analysis_expect( 10 === substr_count( $admin_css, 'body[class~="360-ai_page_360-ai-opportunities"]' ), 'Content Opportunities admin rules are uniformly scoped to the intended screen body class' );
+analysis_expect( false !== strpos( $admin_source, "'360-ai_page_' . self::SLUG !== \$hook_suffix" ) && false !== strpos( $admin_source, "plugins_url( 'assets/admin.css'" ), 'admin stylesheet enqueue is restricted to the Content Opportunities hook suffix' );
+analysis_expect( false === strpos( $admin_source, '<style' ) && false === strpos( $admin_source, 'wp_add_inline_style' ), 'Content Opportunities adds no inline admin CSS' );
 
 echo "360 AI analysis tests passed.\n";

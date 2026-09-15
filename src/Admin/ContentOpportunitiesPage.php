@@ -24,10 +24,19 @@ final class ContentOpportunitiesPage {
 
 	public function register_hooks(): void {
 		add_action( 'admin_menu', array( $this, 'register_menu' ) );
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		add_action( 'admin_post_global360_ai_analyze', array( $this, 'handle_analyze' ) );
 		add_action( 'admin_post_global360_ai_save_provider', array( $this, 'handle_save_provider' ) );
 		add_action( 'admin_post_global360_ai_opportunity_workflow', array( $this, 'handle_workflow' ) );
 		add_action( 'admin_post_global360_ai_generate_draft', array( $this, 'handle_generate_draft' ) );
+	}
+
+	public function enqueue_assets( string $hook_suffix ): void {
+		if ( '360-ai_page_' . self::SLUG !== $hook_suffix ) {
+			return;
+		}
+		$path = GLOBAL360_AI_PATH . 'assets/admin.css';
+		wp_enqueue_style( 'global360-ai-admin', plugins_url( 'assets/admin.css', GLOBAL360_AI_FILE ), array(), is_file( $path ) ? (string) filemtime( $path ) : GLOBAL360_AI_VERSION );
 	}
 
 	public function register_menu(): void {

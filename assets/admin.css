@@ -1,0 +1,57 @@
+body[class~="360-ai_page_360-ai-opportunities"] .wrap {
+  max-width: 1100px;
+}
+
+body[class~="360-ai_page_360-ai-opportunities"] .wrap h2 {
+  margin: 28px 0 16px;
+}
+
+body[class~="360-ai_page_360-ai-opportunities"] .wrap fieldset {
+  display: flow-root;
+  min-width: 0;
+  margin: 0 0 20px;
+  padding: 16px;
+  border: 1px solid #dcdcde;
+  border-radius: 6px;
+  background: #fff;
+}
+
+body[class~="360-ai_page_360-ai-opportunities"] .wrap legend {
+  float: left;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0 0 12px;
+}
+
+body[class~="360-ai_page_360-ai-opportunities"] .wrap legend + * {
+  clear: both;
+}
+
+body[class~="360-ai_page_360-ai-opportunities"] .wrap fieldset label {
+  display: block;
+  margin: 8px 0;
+}
+
+body[class~="360-ai_page_360-ai-opportunities"] .wrap fieldset br {
+  display: none;
+}
+
+body[class~="360-ai_page_360-ai-opportunities"] .wrap input[type="password"] {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 440px;
+  min-height: 40px;
+  margin: 8px 0 12px;
+}
+
+body[class~="360-ai_page_360-ai-opportunities"] .wrap .subsubsub {
+  float: none;
+  margin: 0 0 16px;
+  line-height: 2;
+}
+
+body[class~="360-ai_page_360-ai-opportunities"] .wrap p {
+  overflow-wrap: anywhere;
+}
