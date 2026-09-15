@@ -35,8 +35,8 @@ final class OpportunityService {
 		}
 		try {
 			$opportunities = $this->validator->validate( $response->opportunities, $context );
-		} catch ( \InvalidArgumentException $error ) {
-			$this->save_failure( $response->provider, $response->model, $context_hash, 'Structured response failed deterministic validation.' );
+		} catch ( OpportunityValidationException $error ) {
+			$this->save_failure( $response->provider, $response->model, $context_hash, 'Structured response failed deterministic validation.', $error->diagnostics(), $response->usage );
 			throw $error;
 		}
 		$record = array(
@@ -56,7 +56,7 @@ final class OpportunityService {
 		return $record;
 	}
 
-	private function save_failure( string $provider, string $model, string $context_hash, string $error, array $diagnostics = array() ): void {
+	private function save_failure( string $provider, string $model, string $context_hash, string $error, array $diagnostics = array(), array $usage = array() ): void {
 		$safe_diagnostics = array();
 		if ( $diagnostics ) {
 			$safe_diagnostics = array(
@@ -64,12 +64,20 @@ final class OpportunityService {
 				'provider_error_type'    => substr( sanitize_key( (string) ( $diagnostics['provider_error_type'] ?? '' ) ), 0, 64 ),
 				'provider_error_message' => substr( sanitize_text_field( (string) ( $diagnostics['provider_error_message'] ?? '' ) ), 0, 300 ),
 				'provider_request_id'    => substr( preg_replace( '/[^A-Za-z0-9_-]/', '', (string) ( $diagnostics['provider_request_id'] ?? '' ) ), 0, 128 ),
+				'failure_stage'          => substr( sanitize_key( (string) ( $diagnostics['failure_stage'] ?? '' ) ), 0, 32 ),
+				'validation_rule'        => substr( sanitize_key( (string) ( $diagnostics['validation_rule'] ?? '' ) ), 0, 64 ),
+				'opportunity_index'      => max( 0, min( 5, (int) ( $diagnostics['opportunity_index'] ?? 0 ) ) ),
+				'opportunity_id'         => substr( sanitize_key( (string) ( $diagnostics['opportunity_id'] ?? '' ) ), 0, 64 ),
+				'offending_field'        => substr( sanitize_key( (string) ( $diagnostics['offending_field'] ?? '' ) ), 0, 64 ),
+				'offending_value'        => substr( preg_replace( '/[^A-Za-z0-9:._-]/', '', (string) ( $diagnostics['offending_value'] ?? '' ) ), 0, 96 ),
+				'completion_status'      => substr( sanitize_key( (string) ( $diagnostics['completion_status'] ?? '' ) ), 0, 64 ),
+				'stop_reason'            => substr( sanitize_key( (string) ( $diagnostics['stop_reason'] ?? '' ) ), 0, 64 ),
 			);
 		}
 		$this->repository->save( array(
 			'provider' => $provider, 'model' => $model, 'context_hash' => $context_hash,
 			'status' => 'failed', 'opportunities' => array(),
-			'usage' => array( 'input_tokens' => 0, 'output_tokens' => 0, 'total_tokens' => 0 ),
+			'usage' => array( 'input_tokens' => (int) ( $usage['input_tokens'] ?? 0 ), 'output_tokens' => (int) ( $usage['output_tokens'] ?? 0 ), 'total_tokens' => (int) ( $usage['total_tokens'] ?? 0 ) ),
 			'error' => sanitize_text_field( $error ),
 			'diagnostics' => $safe_diagnostics,
 		) );

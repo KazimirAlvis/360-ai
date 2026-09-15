@@ -67,11 +67,6 @@ draft_rejects( static function () use ( $workflow, $analysis_id ) { $workflow->g
 draft_rejects( static function () use ( $workflow, $analysis_id ) { $workflow->transition( $analysis_id, 'three', 'pending' ); }, 'draft_created is terminal' );
 draft_rejects( static function () use ( $workflow, $analysis_id ) { $workflow->transition( $analysis_id, 'three', 'approved' ); }, 'draft_created cannot transition to approved' );
 draft_rejects( static function () use ( $workflow, $analysis_id ) { $workflow->transition( $analysis_id, 'three', 'rejected' ); }, 'draft_created cannot transition to rejected' );
-$converted = $workflow->record_conversion( $analysis_id, 'three', 123, 456, 'post' );
-draft_expect( 'draft_created' === $converted['status'] && 456 === $converted['final_post_id'] && 'post' === $converted['final_post_type'], 'conversion records final draft without rewriting terminal workflow status' );
-draft_expect( 456 === $workflow->record_conversion( $analysis_id, 'three', 123, 456, 'post' )['final_post_id'], 'identical conversion recording is idempotent' );
-draft_rejects( static function () use ( $workflow, $analysis_id ) { $workflow->record_conversion( $analysis_id, 'three', 123, 457, 'post' ); }, 'workflow rejects a second final draft' );
-draft_rejects( static function () use ( $workflow, $analysis_id ) { $workflow->record_conversion( $analysis_id, 'three', 123, 456, 'clinic' ); }, 'workflow rejects an arbitrary final post type' );
 
 $guard = new WorkflowRequestGuard();
 $guard->assert( 'action', $analysis_id, 'one', 'valid' );
@@ -95,7 +90,10 @@ $valid = array(
 	'title' => $opportunity['proposed_title'], 'slug' => $opportunity['suggested_slug'],
 	'excerpt' => 'A useful educational excerpt for human review.',
 	'content' => '<p>' . str_repeat( 'Educational information for careful human review. ', 8 ) . '</p><h2>Questions to discuss</h2><p>Speak with a qualified professional about individual circumstances.</p>',
-	'seo_title' => $opportunity['proposed_title'], 'meta_description' => 'A useful educational description for human review.', 'suggested_internal_link_ids' => array( 101 ),
+	'seo_title' => $opportunity['proposed_title'], 'meta_description' => 'A useful educational description for human review.',
+		'primary_keyphrase' => 'approved educational topic', 'secondary_keyphrases' => array( 'educational topic guidance', 'patient topic questions', 'specialist discussion guide' ),
+		'content_tags' => array( 'Patient Education', 'Specialist Care', 'Treatment Questions', 'Appointment Preparation' ),
+	'suggested_internal_link_ids' => array( 101 ),
 );
 $validator = new DraftValidator();
 draft_expect( $valid['slug'] === $validator->validate( $valid, $opportunity, $context )['slug'], 'valid semantic HTML draft is accepted' );
@@ -134,6 +132,18 @@ foreach ( array( 'title', 'slug', 'excerpt', 'content' ) as $field ) {
 }
 draft_rejects( static function () use ( $validator, $valid, $opportunity, $context ) { $item = $valid; unset( $item['seo_title'] ); $validator->validate( $item, $opportunity, $context ); }, 'missing required field is rejected' );
 draft_rejects( static function () use ( $validator, $valid, $opportunity, $context ) { $item = $valid; $item['meta_description'] = ''; $validator->validate( $item, $opportunity, $context ); }, 'empty required SEO field is rejected' );
+draft_rejects( static function () use ( $validator, $valid, $opportunity, $context ) { $item = $valid; $item['primary_keyphrase'] = array( 'invalid' ); $validator->validate( $item, $opportunity, $context ); }, 'non-string primary keyphrase is rejected' );
+draft_rejects( static function () use ( $validator, $valid, $opportunity, $context ) { $item = $valid; $item['secondary_keyphrases'] = array( 'only one' ); $validator->validate( $item, $opportunity, $context ); }, 'too few secondary keyphrases are rejected' );
+draft_rejects( static function () use ( $validator, $valid, $opportunity, $context ) { $item = $valid; $item['secondary_keyphrases'] = array( 'phrase one', 'phrase two', 'phrase three', 'phrase four', 'phrase five' ); $validator->validate( $item, $opportunity, $context ); }, 'excessive secondary keyphrases are rejected' );
+draft_rejects( static function () use ( $validator, $valid, $opportunity, $context ) { $item = $valid; $item['secondary_keyphrases'][0] = $item['primary_keyphrase']; $validator->validate( $item, $opportunity, $context ); }, 'duplicate target keyphrases are rejected' );
+$too_few_tags = $valid; $too_few_tags['content_tags'] = array( 'One', 'Two' ); draft_rejects( static function () use ( $validator, $too_few_tags, $opportunity, $context ) { $validator->validate( $too_few_tags, $opportunity, $context ); }, 'fewer than three Content Tags are rejected' );
+$too_many_tags = $valid; $too_many_tags['content_tags'] = array( 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven' ); draft_rejects( static function () use ( $validator, $too_many_tags, $opportunity, $context ) { $validator->validate( $too_many_tags, $opportunity, $context ); }, 'more than six Content Tags are rejected' );
+$duplicate_tags = $valid; $duplicate_tags['content_tags'] = array( 'Neuromodulation', 'Chronic Pain', 'NEUROMODULATION' ); draft_rejects( static function () use ( $validator, $duplicate_tags, $opportunity, $context ) { $validator->validate( $duplicate_tags, $opportunity, $context ); }, 'duplicate Content Tags are rejected case-insensitively' );
+foreach ( array( array( 'Valid Tag', 123, 'Another Tag' ), array( 'Valid Tag', 'Sentence-like tag with far too many individual words here', 'Another Tag' ), array( 'Valid Tag', '<script>Bad</script>', 'Another Tag' ), array( 'Valid Tag', 'Health', 'Another Tag' ) ) as $bad_tags ) { $item = $valid; $item['content_tags'] = $bad_tags; draft_rejects( static function () use ( $validator, $item, $opportunity, $context ) { $validator->validate( $item, $opportunity, $context ); }, 'malformed or filler Content Tag is rejected' ); }
+$tag_draft = $validator->validate( $valid, $opportunity, $context );
+draft_expect( $valid['content_tags'] === $tag_draft['content_tags'], 'valid Content Tags are retained in canonical order' );
+$keyword_draft = $validator->validate( $valid, $opportunity, $context );
+draft_expect( array( 'approved educational topic', 'educational topic guidance', 'patient topic questions', 'specialist discussion guide' ) === $keyword_draft['target_keyphrases'], 'validated primary and secondary keyphrases are returned in bounded editorial order' );
 draft_rejects( static function () use ( $validator, $valid, $opportunity, $context ) { $item = $valid; $item['unexpected'] = 'field'; $validator->validate( $item, $opportunity, $context ); }, 'malformed output is rejected' );
 draft_rejects( static function () use ( $validator, $valid, $opportunity, $context ) { $item = $valid; $item['content'] = '<p>Too short.</p>'; $validator->validate( $item, $opportunity, $context ); }, 'content below sane length is rejected' );
 draft_rejects( static function () use ( $validator, $valid, $opportunity, $context ) { $item = $valid; $item['content'] = '<p>' . str_repeat( 'x', 20001 ) . '</p>'; $validator->validate( $item, $opportunity, $context ); }, 'content above sane length is rejected' );
@@ -162,7 +172,11 @@ $bounded = $workflow->get( $analysis_id, 'one' )['generation_diagnostics'];
 draft_expect( 10 === count( $bounded['unsupported_tags'] ) && 20 === count( $bounded['unsupported_attributes'] ), 'stored structural diagnostics enforce tag and attribute count bounds' );
 draft_expect( false === strpos( serialize( $bounded ), '<private>' ), 'stored structural diagnostics retain only normalized name characters' );
 draft_expect( 10 === DraftRequest::schema()['properties']['suggested_internal_link_ids']['maxItems'], 'canonical draft schema retains internal-link limit' );
+draft_expect( 2 === DraftRequest::schema()['properties']['secondary_keyphrases']['minItems'] && 4 === DraftRequest::schema()['properties']['secondary_keyphrases']['maxItems'], 'canonical draft schema requires two to four secondary target keyphrases' );
+draft_expect( in_array( 'content_tags', DraftRequest::schema()['required'], true ) && 3 === DraftRequest::schema()['properties']['content_tags']['minItems'] && 6 === DraftRequest::schema()['properties']['content_tags']['maxItems'], 'canonical draft schema requires three to six Content Tags' );
 $instructions = DraftRequest::instructions();
+draft_expect( false !== strpos( $instructions, 'one natural primary_keyphrase' ) && false !== strpos( $instructions, 'two to four closely relevant secondary_keyphrases' ), 'canonical instructions request bounded grounded target keyphrases without separate social generations' );
+draft_expect( false !== strpos( $instructions, 'three to six concise content_tags' ) && false !== strpos( $instructions, 'near-duplicate variants' ), 'canonical instructions request reusable bounded Content Tags without tag spam' );
 draft_expect( false !== strpos( $instructions, 'only <p>, <h2>, <h3>, <ul>, <ol>, <li>, <strong>, and <em>' ), 'canonical generation instructions state the exact HTML tag allowlist' );
 draft_expect( false !== strpos( $instructions, 'attribute-free HTML' ) && false !== strpos( $instructions, 'Do not use any other HTML tags or attributes' ), 'canonical generation instructions prohibit HTML attributes' );
 draft_expect( false !== strpos( $instructions, 'Do not insert hyperlinks or <a> tags into the generated content.' ), 'canonical generation instructions explicitly prohibit anchors and hyperlinks' );

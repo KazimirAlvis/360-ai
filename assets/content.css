@@ -1,0 +1,31 @@
+/* The active theme's generic single template otherwise emits its standard-tag empty fallback. */
+.single-g360_content .entry-footer .post-tags {
+	display: none;
+}
+
+.single-g360_content .related-posts .related-posts-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 2rem;
+	max-width: 1400px;
+}
+
+.single-g360_content .related-posts .related-post-item {
+	flex-direction: column;
+}
+
+.single-g360_content .related-posts .related-post-thumbnail {
+	width: 100%;
+}
+
+@media (max-width: 1024px) {
+	.single-g360_content .related-posts .related-posts-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+@media (max-width: 768px) {
+	.single-g360_content .related-posts .related-posts-grid {
+		grid-template-columns: 1fr;
+	}
+}

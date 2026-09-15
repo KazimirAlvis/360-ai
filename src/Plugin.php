@@ -12,13 +12,12 @@ use Global360\AI\Context\AnalysisContentReader;
 use Global360\AI\Context\ContentInventory;
 use Global360\AI\Context\SiteContextBuilder;
 use Global360\AI\Content\ContentDraftPostType;
+use Global360\AI\Content\ContentFrontend;
 use Global360\AI\Core\CoreAdapter;
-use Global360\AI\Generation\ConversionService;
 use Global360\AI\Generation\DraftGenerationContextBuilder;
 use Global360\AI\Generation\DraftService;
 use Global360\AI\Generation\DraftValidator;
 use Global360\AI\Generation\GenerationLock;
-use Global360\AI\Integration\SeoPressAdapter;
 use Global360\AI\Settings\ApiKeyManager;
 use Global360\AI\Storage\AnalysisRepository;
 use Global360\AI\Storage\WorkflowRepository;
@@ -61,8 +60,10 @@ final class Plugin {
 		);
 		$workflow      = new WorkflowRepository( $repository );
 		$drafts        = new DraftService( $workflow, new DraftGenerationContextBuilder( $analysis, $adapter ), new ProviderFactory( $key_manager ), new DraftValidator(), new GenerationLock() );
-		$content       = new ContentDraftPostType( new ConversionService( $workflow, new SeoPressAdapter() ) );
+		$content       = new ContentDraftPostType();
 		$content->register_hooks();
+		$content_frontend = new ContentFrontend();
+		$content_frontend->register_hooks();
 		$opportunities = new ContentOpportunitiesPage( $service, $repository, $key_manager, $workflow, $drafts );
 		$opportunities->register_hooks();
 	}

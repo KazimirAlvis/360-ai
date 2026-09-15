@@ -9,7 +9,7 @@ final class OpportunityValidator {
 	/** @return array<int,array<string,mixed>> */
 	public function validate( array $opportunities, array $context ): array {
 		if ( 5 !== count( $opportunities ) ) {
-			throw new \InvalidArgumentException( 'Analysis must contain exactly five opportunities.' );
+			$this->fail( 'Analysis must contain exactly five opportunities.', 'opportunity_count', -1, '', 'count', count( $opportunities ) );
 		}
 		$entities = (array) ( $context['allowed_entities'] ?? array() );
 		$clinic_ids = array_map( 'intval', (array) ( $entities['clinic_ids'] ?? array() ) );
@@ -28,45 +28,47 @@ final class OpportunityValidator {
 		$clean = array();
 
 		foreach ( $opportunities as $index => $item ) {
-			if ( ! is_array( $item ) ) { throw new \InvalidArgumentException( 'Opportunity is malformed.' ); }
+			if ( ! is_array( $item ) ) { $this->fail( 'Opportunity is malformed.', 'malformed_opportunity', $index ); }
+			$opportunity_id = sanitize_key( (string) ( $item['id'] ?? '' ) );
 			$title = sanitize_text_field( (string) ( $item['proposed_title'] ?? '' ) );
 			$slug  = sanitize_title( (string) ( $item['suggested_slug'] ?? '' ) );
 			$type  = (string) ( $item['content_type'] ?? '' );
 			$category = (string) ( $item['category'] ?? '' );
-			if ( '' === $title || '' === $slug || ! in_array( $type, self::TYPES, true ) || ! in_array( $category, self::CATEGORIES, true ) ) {
-				throw new \InvalidArgumentException( 'Opportunity contains an invalid title, slug, type, or category.' );
-			}
+			if ( '' === $title ) { $this->fail( 'Opportunity contains an invalid title.', 'invalid_title', $index, $opportunity_id, 'proposed_title', gettype( $item['proposed_title'] ?? null ) ); }
+			if ( '' === $slug ) { $this->fail( 'Opportunity contains an invalid slug.', 'invalid_slug', $index, $opportunity_id, 'suggested_slug', gettype( $item['suggested_slug'] ?? null ) ); }
+			if ( ! in_array( $type, self::TYPES, true ) ) { $this->fail( 'Opportunity contains an invalid content type.', 'invalid_content_type', $index, $opportunity_id, 'content_type', $type ); }
+			if ( ! in_array( $category, self::CATEGORIES, true ) ) { $this->fail( 'Opportunity contains an invalid category.', 'invalid_category', $index, $opportunity_id, 'category', $category ); }
 			$title_key = $this->normalize( $title );
-			if ( isset( $titles[ $title_key ] ) || isset( $slugs[ $slug ] ) ) {
-				throw new \InvalidArgumentException( 'Analysis contains duplicate recommendation titles or slugs.' );
-			}
+			if ( isset( $titles[ $title_key ] ) ) { $this->fail( 'Analysis contains a duplicate recommendation title.', 'duplicate_title', $index, $opportunity_id, 'proposed_title' ); }
+			if ( isset( $slugs[ $slug ] ) ) { $this->fail( 'Analysis contains a duplicate recommendation slug.', 'duplicate_slug', $index, $opportunity_id, 'suggested_slug', $slug ); }
 			foreach ( $existing as $existing_item ) {
 				if ( $this->overlaps( $title, $slug, (string) ( $existing_item['title'] ?? '' ), (string) ( $existing_item['slug'] ?? '' ) ) ) {
-					throw new \InvalidArgumentException( 'A recommendation substantially overlaps existing content.' );
+					$this->fail( 'A recommendation substantially overlaps existing content.', 'existing_content_overlap', $index, $opportunity_id, 'existing_content_id', (int) ( $existing_item['id'] ?? 0 ) );
 				}
 			}
 			$titles[ $title_key ] = true;
 			$slugs[ $slug ] = true;
 
-			$locations = $this->validated_strings( $item['relevant_location_ids'] ?? array(), $location_ids, 'location' );
-			$clinics = $this->validated_ints( $item['relevant_clinic_ids'] ?? array(), $clinic_ids, 'Clinic' );
-			$doctors = $this->validated_ints( $item['relevant_doctor_ids'] ?? array(), $doctor_ids, 'Doctor' );
-			$links = $this->validated_ints( $item['suggested_internal_link_ids'] ?? array(), $content_ids, 'internal-link Post' );
+			$locations = $this->validated_strings( $item['relevant_location_ids'] ?? array(), $location_ids, 'location', 'invalid_location_id', $index, $opportunity_id );
+			$clinics = $this->validated_ints( $item['relevant_clinic_ids'] ?? array(), $clinic_ids, 'Clinic', 'invalid_clinic_id', $index, $opportunity_id );
+			$doctors = $this->validated_ints( $item['relevant_doctor_ids'] ?? array(), $doctor_ids, 'Doctor', 'invalid_doctor_id', $index, $opportunity_id );
+			$links = $this->validated_ints( $item['suggested_internal_link_ids'] ?? array(), $content_ids, 'internal-link Post', 'invalid_internal_link_id', $index, $opportunity_id );
 			$geo_scope = sanitize_text_field( (string) ( $item['geo_scope'] ?? 'national' ) );
 			if ( ( 'local' === $category || 'national' !== strtolower( $geo_scope ) ) && ( empty( $locations ) || empty( $clinics ) ) ) {
-				throw new \InvalidArgumentException( 'Local recommendations require valid location and Clinic grounding.' );
+				$this->fail( 'Local recommendations require valid location and Clinic grounding.', 'missing_local_grounding', $index, $opportunity_id, empty( $locations ) ? 'relevant_location_ids' : 'relevant_clinic_ids', 'empty' );
 			}
 			if ( 'local' === $category || 'national' !== strtolower( $geo_scope ) ) {
 				$grounded_clinics = array();
 				foreach ( $locations as $location_id ) { $grounded_clinics = array_merge( $grounded_clinics, $location_clinics[ $location_id ] ?? array() ); }
-				if ( array_diff( $clinics, array_unique( $grounded_clinics ) ) ) {
-					throw new \InvalidArgumentException( 'A local recommendation references a Clinic outside its selected location.' );
+				$outside_clinics = array_values( array_diff( $clinics, array_unique( $grounded_clinics ) ) );
+				if ( $outside_clinics ) {
+					$this->fail( 'A local recommendation references a Clinic outside its selected location.', 'clinic_location_mismatch', $index, $opportunity_id, 'relevant_clinic_ids', (int) $outside_clinics[0] );
 				}
 			}
 			$priority = (int) ( $item['priority'] ?? 0 );
 			$confidence = (float) ( $item['confidence'] ?? 0 );
-			if ( 0 > $priority || 100 < $priority ) { throw new \InvalidArgumentException( 'Opportunity priority must be between 0 and 100.' ); }
-			if ( 0 > $confidence || 1 < $confidence ) { throw new \InvalidArgumentException( 'Opportunity confidence must be between 0 and 1.' ); }
+			if ( 0 > $priority || 100 < $priority ) { $this->fail( 'Opportunity priority must be between 0 and 100.', 'invalid_priority', $index, $opportunity_id, 'priority', $priority ); }
+			if ( 0 > $confidence || 1 < $confidence ) { $this->fail( 'Opportunity confidence must be between 0 and 1.', 'invalid_confidence', $index, $opportunity_id, 'confidence', $confidence ); }
 
 			$clean[] = array(
 				'id' => sanitize_key( (string) ( $item['id'] ?? 'opportunity-' . ( $index + 1 ) ) ),
@@ -84,16 +86,30 @@ final class OpportunityValidator {
 		return $clean;
 	}
 
-	private function validated_ints( $values, array $allowed, string $label ): array {
+	private function validated_ints( $values, array $allowed, string $label, string $rule, int $index, string $opportunity_id ): array {
 		$values = array_values( array_unique( array_map( 'intval', (array) $values ) ) );
-		if ( array_diff( $values, $allowed ) ) { throw new \InvalidArgumentException( 'Analysis contains an invalid ' . $label . ' reference.' ); }
+		$invalid = array_values( array_diff( $values, $allowed ) );
+		if ( $invalid ) { $this->fail( 'Analysis contains an invalid ' . $label . ' reference.', $rule, $index, $opportunity_id, strtolower( str_replace( ' ', '_', $label ) ) . '_id', (int) $invalid[0] ); }
 		return $values;
 	}
 
-	private function validated_strings( $values, array $allowed, string $label ): array {
+	private function validated_strings( $values, array $allowed, string $label, string $rule, int $index, string $opportunity_id ): array {
 		$values = array_values( array_unique( array_map( 'sanitize_text_field', (array) $values ) ) );
-		if ( array_diff( $values, $allowed ) ) { throw new \InvalidArgumentException( 'Analysis contains an invalid ' . $label . ' reference.' ); }
+		$invalid = array_values( array_diff( $values, $allowed ) );
+		if ( $invalid ) { $this->fail( 'Analysis contains an invalid ' . $label . ' reference.', $rule, $index, $opportunity_id, $label . '_id', $invalid[0] ); }
 		return $values;
+	}
+
+	private function fail( string $message, string $rule, int $index, string $opportunity_id = '', string $field = '', $value = null ): void {
+		$diagnostics = array( 'failure_stage' => 'validation', 'validation_rule' => $rule );
+		if ( 0 <= $index ) { $diagnostics['opportunity_index'] = $index + 1; }
+		if ( '' !== $opportunity_id ) { $diagnostics['opportunity_id'] = substr( sanitize_key( $opportunity_id ), 0, 64 ); }
+		if ( '' !== $field ) { $diagnostics['offending_field'] = substr( sanitize_key( $field ), 0, 64 ); }
+		if ( null !== $value ) {
+			$primitive = is_bool( $value ) ? ( $value ? 'true' : 'false' ) : ( is_scalar( $value ) ? (string) $value : gettype( $value ) );
+			$diagnostics['offending_value'] = substr( preg_replace( '/[^A-Za-z0-9:._-]/', '', $primitive ), 0, 96 );
+		}
+		throw new OpportunityValidationException( $message, $diagnostics );
 	}
 
 	private function overlaps( string $title, string $slug, string $existing_title, string $existing_slug ): bool {
