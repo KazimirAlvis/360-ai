@@ -2,7 +2,7 @@
 
 360 AI is the general AI layer for the 360 platform. It is **not** an SEO-only plugin. SEO and GEO/AEO will be modules alongside future content, auditing, internal-linking, image, Search Console, and analytics-assisted workflows.
 
-## Current release: 0.4.3
+## Current release: 0.4.4
 
 The foundation release provides:
 
@@ -17,6 +17,8 @@ The foundation release provides:
 Version 0.4.2 makes established-site analysis more robust without weakening its safeguards: providers return eight ordered candidates, candidate-level duplicate, cannibalization, entity, and geographic failures are rejected independently, and exactly the first five valid opportunities are retained. Fewer than five valid candidates still fails closed, makes no retry, and saves no recommendations.
 
 Version 0.4.3 adds bounded private diagnostics for Anthropic transport failures and correctly distinguishes transport, provider HTTP, deterministic validation, and historical failures in analysis history. It does not change provider requests, validation, generation, or publishing behavior.
+
+Version 0.4.4 adds the standard 360 manifest-based GitHub updater. Production installations read `plugin-manifest.json` from repository `main`, compare semantic versions, show normal WordPress Admin updates, download the `main` branch package, and normalize GitHub's extracted directory to `wp-content/plugins/360-ai/`. The updater claims only packages containing the 360 AI bootstrap and never replaces an existing unrelated target.
 
 ## Content Opportunities
 

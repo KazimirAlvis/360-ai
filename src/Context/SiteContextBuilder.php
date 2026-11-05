@@ -29,7 +29,7 @@ final class SiteContextBuilder {
 			'platform' => array(
 				'connected'  => $connected,
 				'core_version'=> $this->core->version(),
-				'ai_version'  => defined( 'GLOBAL360_AI_VERSION' ) ? GLOBAL360_AI_VERSION : '0.4.3',
+				'ai_version'  => defined( 'GLOBAL360_AI_VERSION' ) ? GLOBAL360_AI_VERSION : '0.4.4',
 			),
 			'site_context'   => $connected ? $this->core->site_context() : array(),
 			'content_summary'=> $this->inventory->summary(),

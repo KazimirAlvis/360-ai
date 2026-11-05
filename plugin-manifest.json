@@ -1,0 +1,18 @@
+{
+	"name": "360 AI",
+	"slug": "360-ai",
+	"version": "0.4.4",
+	"download_url": "https://github.com/KazimirAlvis/360-ai/archive/refs/heads/main.zip",
+	"requires": "6.0",
+	"tested": "6.9",
+	"requires_php": "7.4",
+	"last_updated": "2026-11-05 11:15:00",
+	"author": "<a href='https://github.com/KazimirAlvis'>PR360</a>",
+	"author_profile": "https://github.com/KazimirAlvis",
+	"homepage": "https://github.com/KazimirAlvis/360-ai",
+	"sections": {
+		"description": "<p>Provides AI-assisted content opportunity analysis, human approval workflows, draft generation, and permanent Content management for the Global 360 platform.</p>",
+		"installation": "<ol><li>Install the plugin in <code>/wp-content/plugins/360-ai/</code>.</li><li>Activate 360 AI and configure a supported provider.</li></ol>",
+		"changelog": "<h4>0.4.4</h4><ul><li>Add the standard 360 GitHub updater for future WordPress Admin updates.</li><li>Preserve strict package ownership and normalize GitHub branch ZIPs to the canonical plugin directory.</li></ul><h4>0.4.3</h4><ul><li>Add bounded private Anthropic transport diagnostics and distinguish transport, HTTP, validation, and historical failures.</li></ul><h4>0.4.2</h4><ul><li>Make opportunity analysis resilient by selecting the first five valid recommendations from eight ordered candidates.</li></ul>"
+	}
+}

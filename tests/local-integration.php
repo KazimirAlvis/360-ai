@@ -80,6 +80,26 @@ ob_start(); $admin->render(); $html = ob_get_clean();
 ai_integration_expect( false !== strpos( $html, 'Platform Core' ) && false !== strpos( $html, 'Connected' ), 'authenticated dashboard renders connected status' );
 ai_integration_expect( false !== strpos( $html, esc_html( GLOBAL360_PLATFORM_VERSION ) ), 'authenticated dashboard displays Core version' );
 
+$manifest_version = GLOBAL360_AI_VERSION;
+$manifest_filter  = static function ( $preempt, $args, $url ) use ( &$manifest_version ) {
+	if ( 'https://raw.githubusercontent.com/KazimirAlvis/360-ai/main/plugin-manifest.json' !== $url ) { return $preempt; }
+	return array(
+		'headers' => array( 'content-type' => 'application/json' ),
+		'body' => wp_json_encode( array( 'version' => $manifest_version, 'download_url' => 'https://github.com/KazimirAlvis/360-ai/archive/refs/heads/main.zip', 'homepage' => 'https://github.com/KazimirAlvis/360-ai' ) ),
+		'response' => array( 'code' => 200, 'message' => 'OK' ), 'cookies' => array(), 'filename' => null,
+	);
+};
+add_filter( 'pre_http_request', $manifest_filter, 10, 3 );
+$plugin_key = plugin_basename( GLOBAL360_AI_FILE );
+$updates = apply_filters( 'pre_set_site_transient_update_plugins', (object) array( 'checked' => array( $plugin_key => GLOBAL360_AI_VERSION ), 'response' => array() ) );
+ai_integration_expect( empty( $updates->response[ $plugin_key ] ), 'matching 360 AI manifest does not offer an update' );
+$version_parts = array_pad( array_map( 'intval', explode( '.', GLOBAL360_AI_VERSION ) ), 3, 0 );
+$version_parts[2]++;
+$manifest_version = implode( '.', array_slice( $version_parts, 0, 3 ) );
+$updates = apply_filters( 'pre_set_site_transient_update_plugins', (object) array( 'checked' => array( $plugin_key => GLOBAL360_AI_VERSION ), 'response' => array() ) );
+ai_integration_expect( isset( $updates->response[ $plugin_key ] ) && $manifest_version === $updates->response[ $plugin_key ]->new_version, 'newer 360 AI manifest offers an update in WordPress' );
+remove_filter( 'pre_http_request', $manifest_filter, 10 );
+
 echo 'Dashboard query delta: ' . $dashboard_queries . PHP_EOL;
 echo 'Dataset: ' . count( $clinic_ids ) . ' Clinics, ' . count( $doctor_ids ) . ' Doctors, ' . (int) $context['platform_data']['relationships'] . ' relationships' . PHP_EOL;
 echo "360 AI local integration tests passed.\n";

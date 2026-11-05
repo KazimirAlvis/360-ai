@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 360 AI
  * Description: General AI foundation and future AI-assisted workflows for the 360 platform.
- * Version: 0.4.3
+ * Version: 0.4.4
  * Author: PR360
  * Requires at least: 6.0
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'GLOBAL360_AI_VERSION', '0.4.3' );
+define( 'GLOBAL360_AI_VERSION', '0.4.4' );
 define( 'GLOBAL360_AI_FILE', __FILE__ );
 define( 'GLOBAL360_AI_PATH', plugin_dir_path( __FILE__ ) );
 
@@ -38,6 +38,7 @@ $global360_ai_files = array(
 	'src/Settings/ApiKeyManager.php',
 	'src/Storage/AnalysisRepository.php',
 	'src/Storage/WorkflowRepository.php',
+	'src/Updater.php',
 	'src/Integration/SeoPressAdapter.php',
 	'src/Security/WorkflowRequestGuard.php',
 	'src/Analysis/OpportunityService.php',
@@ -58,3 +59,4 @@ foreach ( $global360_ai_files as $global360_ai_file ) {
 unset( $global360_ai_file, $global360_ai_files );
 
 \Global360\AI\Plugin::instance()->boot();
+\Global360\AI\Updater::init();

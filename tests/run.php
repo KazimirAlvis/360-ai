@@ -102,7 +102,8 @@ final class FakePlatform {
 
 $bootstrap = file_get_contents( dirname( __DIR__ ) . '/360-ai.php' );
 ai_expect( false !== strpos( $bootstrap, 'Plugin Name: 360 AI' ) && false !== strpos( $bootstrap, "'src/Plugin.php'" ), 'plugin bootstrap declares identity and loads modular Plugin class' );
-ai_expect( false !== strpos( $bootstrap, 'Version: 0.4.3' ) && false !== strpos( $bootstrap, "define( 'GLOBAL360_AI_VERSION', '0.4.3' )" ), '0.4.3 plugin header and authoritative version constant are synchronized' );
+ai_expect( false !== strpos( $bootstrap, 'Version: 0.4.4' ) && false !== strpos( $bootstrap, "define( 'GLOBAL360_AI_VERSION', '0.4.4' )" ), '0.4.4 plugin header and authoritative version constant are synchronized' );
+ai_expect( false !== strpos( $bootstrap, "'src/Updater.php'" ) && false !== strpos( $bootstrap, '\\Global360\\AI\\Updater::init();' ), 'plugin bootstrap loads and initializes the WordPress updater' );
 
 $missing = new CoreAdapter( static function () { return null; } );
 ai_expect( ! $missing->is_available() && '' === $missing->version(), 'Core unavailability is graceful' );
