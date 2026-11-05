@@ -150,18 +150,34 @@ final class ContentOpportunitiesPage {
 		if ( 'failed' !== ( $record['status'] ?? '' ) ) { return; }
 		$diagnostics = is_array( $record['diagnostics'] ?? null ) ? $record['diagnostics'] : array();
 		$rule = sanitize_key( (string) ( $diagnostics['validation_rule'] ?? '' ) );
-		if ( '' === $rule ) {
-			echo '<p><strong>' . esc_html__( 'Analysis failed.', '360-ai' ) . '</strong> ' . esc_html__( 'No additional diagnostic details were retained for this historical attempt.', '360-ai' ) . '</p>';
+		if ( '' !== $rule ) {
+			$parts = array( 'Validation failed', $rule );
+			if ( ! empty( $diagnostics['opportunity_id'] ) ) { $parts[] = 'Opportunity ' . sanitize_key( (string) $diagnostics['opportunity_id'] ); }
+			elseif ( ! empty( $diagnostics['opportunity_index'] ) ) { $parts[] = 'Opportunity ' . (int) $diagnostics['opportunity_index']; }
+			if ( ! empty( $diagnostics['offending_field'] ) ) {
+				$value = (string) ( $diagnostics['offending_value'] ?? '' );
+				$parts[] = sanitize_key( (string) $diagnostics['offending_field'] ) . ( '' !== $value ? ': ' . $value : '' );
+			}
+			echo '<p><strong>' . esc_html( implode( ' — ', $parts ) ) . '</strong></p>';
 			return;
 		}
-		$parts = array( 'Validation failed', $rule );
-		if ( ! empty( $diagnostics['opportunity_id'] ) ) { $parts[] = 'Opportunity ' . sanitize_key( (string) $diagnostics['opportunity_id'] ); }
-		elseif ( ! empty( $diagnostics['opportunity_index'] ) ) { $parts[] = 'Opportunity ' . (int) $diagnostics['opportunity_index']; }
-		if ( ! empty( $diagnostics['offending_field'] ) ) {
-			$value = (string) ( $diagnostics['offending_value'] ?? '' );
-			$parts[] = sanitize_key( (string) $diagnostics['offending_field'] ) . ( '' !== $value ? ': ' . $value : '' );
+		if ( ! empty( $diagnostics['transport_error_code'] ) || ! empty( $diagnostics['transport_error_message'] ) ) {
+			$parts = array( 'Transport failed' );
+			if ( ! empty( $diagnostics['transport_error_code'] ) ) { $parts[] = sanitize_key( (string) $diagnostics['transport_error_code'] ); }
+			if ( ! empty( $diagnostics['transport_error_message'] ) ) { $parts[] = (string) $diagnostics['transport_error_message']; }
+			echo '<p><strong>' . esc_html( implode( ' — ', $parts ) ) . '</strong></p>';
+			return;
 		}
-		echo '<p><strong>' . esc_html( implode( ' — ', $parts ) ) . '</strong></p>';
+		if ( ! empty( $diagnostics['http_status'] ) || ! empty( $diagnostics['provider_error_type'] ) ) {
+			$parts = array( 'Provider HTTP failure' );
+			if ( ! empty( $diagnostics['http_status'] ) ) { $parts[] = 'HTTP ' . (int) $diagnostics['http_status']; }
+			if ( ! empty( $diagnostics['provider_error_type'] ) ) { $parts[] = sanitize_key( (string) $diagnostics['provider_error_type'] ); }
+			if ( ! empty( $diagnostics['provider_error_message'] ) ) { $parts[] = (string) $diagnostics['provider_error_message']; }
+			if ( ! empty( $diagnostics['provider_request_id'] ) ) { $parts[] = 'Request ' . (string) $diagnostics['provider_request_id']; }
+			echo '<p><strong>' . esc_html( implode( ' — ', $parts ) ) . '</strong></p>';
+			return;
+		}
+		echo '<p><strong>' . esc_html__( 'Analysis failed.', '360-ai' ) . '</strong> ' . esc_html__( 'No additional diagnostic details were retained for this historical attempt.', '360-ai' ) . '</p>';
 	}
 
 	private function key_fields( string $provider, string $label, string $constant ): void {

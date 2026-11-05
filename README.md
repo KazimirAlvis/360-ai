@@ -2,7 +2,7 @@
 
 360 AI is the general AI layer for the 360 platform. It is **not** an SEO-only plugin. SEO and GEO/AEO will be modules alongside future content, auditing, internal-linking, image, Search Console, and analytics-assisted workflows.
 
-## Current release: 0.4.2
+## Current release: 0.4.3
 
 The foundation release provides:
 
@@ -15,6 +15,8 @@ The foundation release provides:
 **Content Opportunities** is a human-review workflow that builds bounded, Platform Core-grounded site context. Providers return eight ordered candidates; deterministic validation keeps the first five valid recommendations. It does not create or publish normal Pages or Posts, images, or Clinic/Doctor source data.
 
 Version 0.4.2 makes established-site analysis more robust without weakening its safeguards: providers return eight ordered candidates, candidate-level duplicate, cannibalization, entity, and geographic failures are rejected independently, and exactly the first five valid opportunities are retained. Fewer than five valid candidates still fails closed, makes no retry, and saves no recommendations.
+
+Version 0.4.3 adds bounded private diagnostics for Anthropic transport failures and correctly distinguishes transport, provider HTTP, deterministic validation, and historical failures in analysis history. It does not change provider requests, validation, generation, or publishing behavior.
 
 ## Content Opportunities
 

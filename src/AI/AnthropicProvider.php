@@ -45,7 +45,7 @@ final class AnthropicProvider implements ProviderInterface {
 			)
 		);
 		if ( is_wp_error( $response ) ) {
-			return AnalysisResponse::failure( $this->name(), $this->model(), 'The Anthropic request failed.' );
+			return AnalysisResponse::failure( $this->name(), $this->model(), 'The Anthropic request failed.', $this->transport_diagnostics( $response ) );
 		}
 
 		$status = wp_remote_retrieve_response_code( $response );
@@ -90,7 +90,7 @@ final class AnthropicProvider implements ProviderInterface {
 				'output_config' => array( 'format' => array( 'type' => 'json_schema', 'schema' => self::draft_schema() ) ),
 			) ),
 		) );
-		if ( is_wp_error( $response ) ) { return DraftResponse::failure( $this->name(), $this->model(), 'The Anthropic draft request failed.' ); }
+		if ( is_wp_error( $response ) ) { return DraftResponse::failure( $this->name(), $this->model(), 'The Anthropic draft request failed.', $this->transport_diagnostics( $response ) ); }
 		$status = wp_remote_retrieve_response_code( $response );
 		$body = json_decode( wp_remote_retrieve_body( $response ), true );
 		if ( 200 > $status || 300 <= $status ) { return DraftResponse::failure( $this->name(), $this->model(), 'Anthropic draft request failed.', $this->error_diagnostics( $response, $body, $status ) ); }
@@ -143,6 +143,20 @@ final class AnthropicProvider implements ProviderInterface {
 			'provider_error_type'    => substr( sanitize_key( (string) ( $error['type'] ?? '' ) ), 0, 64 ),
 			'provider_error_message' => substr( sanitize_text_field( (string) ( $error['message'] ?? '' ) ), 0, 300 ),
 			'provider_request_id'    => substr( preg_replace( '/[^A-Za-z0-9_-]/', '', $request_id ), 0, 128 ),
+		);
+	}
+
+	/** @return array<string,string> */
+	private function transport_diagnostics( $error ): array {
+		$code    = method_exists( $error, 'get_error_code' ) ? (string) $error->get_error_code() : '';
+		$message = method_exists( $error, 'get_error_message' ) ? (string) $error->get_error_message() : '';
+		$message = preg_replace( '/sk-ant-[A-Za-z0-9_-]+/', '[redacted]', $message );
+		$message = preg_replace( '/Bearer\s+\S+/i', 'Bearer [redacted]', $message );
+
+		return array(
+			'failure_stage'          => 'transport',
+			'transport_error_code'   => substr( sanitize_key( $code ), 0, 64 ),
+			'transport_error_message' => substr( sanitize_text_field( $message ), 0, 300 ),
 		);
 	}
 }

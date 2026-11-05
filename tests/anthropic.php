@@ -6,7 +6,13 @@ $anthropic_options = array();
 $anthropic_http_response = null;
 $anthropic_request = array();
 
-class WP_Error {}
+class WP_Error {
+	private $code;
+	private $message;
+	public function __construct( $code = '', $message = '' ) { $this->code = $code; $this->message = $message; }
+	public function get_error_code() { return $this->code; }
+	public function get_error_message() { return $this->message; }
+}
 function is_wp_error( $value ) { return $value instanceof WP_Error; }
 function wp_json_encode( $value ) { return json_encode( $value ); }
 function sanitize_text_field( $value ) { return trim( strip_tags( (string) $value ) ); }
@@ -172,8 +178,14 @@ foreach ( $error_cases as $status => $type ) {
 }
 $anthropic_http_response = anthropic_response( 400, array( 'type' => 'error', 'error' => array( 'type' => 'invalid_request_error', 'message' => 'Header fallback.' ) ), array( 'request-id' => 'req_header456' ) );
 anthropic_expect( 'req_header456' === $provider->analyze( array() )->diagnostics['provider_request_id'], 'Anthropic diagnostics use request-id response-header fallback' );
-$anthropic_http_response = new WP_Error();
-anthropic_expect( 'The Anthropic request failed.' === $provider->analyze( array() )->error, 'Anthropic timeout or transport error is sanitized' );
+$anthropic_http_response = new WP_Error( 'http_request_failed', 'cURL error 28: Operation timed out after 60001 milliseconds with 0 bytes received. sk-ant-secret-must-not-persist' );
+$transport_failure = $provider->analyze( array( 'secret_context' => 'must-not-persist' ) );
+anthropic_expect( 'The Anthropic request failed.' === $transport_failure->error, 'Anthropic timeout or transport error retains a safe public error' );
+anthropic_expect( 'transport' === $transport_failure->diagnostics['failure_stage'] && 'http_request_failed' === $transport_failure->diagnostics['transport_error_code'], 'Anthropic analysis transport diagnostics retain a bounded error code' );
+anthropic_expect( false !== strpos( $transport_failure->diagnostics['transport_error_message'], 'cURL error 28' ) && false === strpos( $transport_failure->diagnostics['transport_error_message'], 'sk-ant-secret' ), 'Anthropic analysis transport message is useful and redacts key-like material' );
+$draft_transport_failure = $provider->generate_draft( array( 'secret_context' => 'must-not-persist' ) );
+anthropic_expect( 'The Anthropic draft request failed.' === $draft_transport_failure->error && 'transport' === $draft_transport_failure->diagnostics['failure_stage'], 'Anthropic draft transport failures retain the same safe diagnostics' );
+anthropic_expect( false === strpos( serialize( $draft_transport_failure->diagnostics ), 'secret_context' ) && false === strpos( serialize( $draft_transport_failure->diagnostics ), 'sk-ant-secret' ), 'transport diagnostics retain no context or credentials' );
 
 $admin_source = file_get_contents( dirname( __DIR__ ) . '/src/Admin/ContentOpportunitiesPage.php' );
 anthropic_expect( false === strpos( $admin_source, 'get_for( $provider )' ) && false === strpos( $admin_source, 'get_for($provider)' ), 'admin presentation never retrieves stored secret values' );

@@ -184,11 +184,20 @@ analysis_expect( 'validation' === $validation_failure['diagnostics']['failure_st
 analysis_expect( 150 === $validation_failure['usage']['total_tokens'] && array() === $validation_failure['opportunities'], 'post-provider validation failure preserves usage and saves zero recommendations' );
 analysis_expect( ! isset( $validation_failure['diagnostics']['raw_response'], $validation_failure['diagnostics']['context'], $validation_failure['diagnostics']['api_key'] ), 'validation diagnostics exclude raw output, context, and credentials' );
 
+$save_failure->invoke( $service, 'anthropic', 'claude-sonnet-5', 'safe-context-hash', 'The Anthropic request failed.', array( 'failure_stage' => 'transport', 'transport_error_code' => 'http_request_failed', 'transport_error_message' => 'cURL error 28: Operation timed out.', 'headers' => array( 'x-api-key' => 'must-not-persist' ), 'context' => 'must-not-persist' ) );
+$transport_failure = $repository->latest();
+analysis_expect( 'transport' === $transport_failure['diagnostics']['failure_stage'] && 'http_request_failed' === $transport_failure['diagnostics']['transport_error_code'] && false !== strpos( $transport_failure['diagnostics']['transport_error_message'], 'cURL error 28' ), 'analysis history retains bounded transport diagnostics' );
+analysis_expect( ! isset( $transport_failure['diagnostics']['headers'], $transport_failure['diagnostics']['context'] ) && false === strpos( serialize( $transport_failure ), 'must-not-persist' ), 'analysis transport history excludes headers and context' );
+
 $page_reflection = new ReflectionClass( ContentOpportunitiesPage::class );
 $page = $page_reflection->newInstanceWithoutConstructor();
 $render_failure = $page_reflection->getMethod( 'render_analysis_failure' ); $render_failure->setAccessible( true );
 ob_start(); $render_failure->invoke( $page, $validation_failure ); $diagnostic_html = ob_get_clean();
 analysis_expect( false !== strpos( $diagnostic_html, 'invalid_location_id' ) && false !== strpos( $diagnostic_html, 'Opportunity item-4' ) && false !== strpos( $diagnostic_html, 'city:xx:example' ), 'private admin history renders concise sanitized validation diagnostics' );
+ob_start(); $render_failure->invoke( $page, $transport_failure ); $transport_html = ob_get_clean();
+analysis_expect( false !== strpos( $transport_html, 'Transport failed' ) && false !== strpos( $transport_html, 'http_request_failed' ) && false !== strpos( $transport_html, 'cURL error 28' ), 'private admin history renders concise sanitized transport diagnostics' );
+ob_start(); $render_failure->invoke( $page, array( 'status' => 'failed', 'diagnostics' => array( 'http_status' => 401, 'provider_error_type' => 'authentication_error', 'provider_error_message' => 'invalid x-api-key', 'provider_request_id' => 'req_safe123' ) ) ); $http_html = ob_get_clean();
+analysis_expect( false !== strpos( $http_html, 'Provider HTTP failure' ) && false !== strpos( $http_html, 'HTTP 401' ) && false !== strpos( $http_html, 'authentication_error' ) && false !== strpos( $http_html, 'req_safe123' ), 'private admin history renders sanitized provider HTTP diagnostics' );
 ob_start(); $render_failure->invoke( $page, array( 'status' => 'failed', 'diagnostics' => array() ) ); $historical_html = ob_get_clean();
 analysis_expect( false !== strpos( $historical_html, 'No additional diagnostic details' ), 'historical diagnostic-less failures render safely without fabricated details' );
 

@@ -65,6 +65,8 @@ final class OpportunityService {
 				'provider_error_type'    => substr( sanitize_key( (string) ( $diagnostics['provider_error_type'] ?? '' ) ), 0, 64 ),
 				'provider_error_message' => substr( sanitize_text_field( (string) ( $diagnostics['provider_error_message'] ?? '' ) ), 0, 300 ),
 				'provider_request_id'    => substr( preg_replace( '/[^A-Za-z0-9_-]/', '', (string) ( $diagnostics['provider_request_id'] ?? '' ) ), 0, 128 ),
+				'transport_error_code'   => substr( sanitize_key( (string) ( $diagnostics['transport_error_code'] ?? '' ) ), 0, 64 ),
+				'transport_error_message' => substr( sanitize_text_field( (string) ( $diagnostics['transport_error_message'] ?? '' ) ), 0, 300 ),
 				'failure_stage'          => substr( sanitize_key( (string) ( $diagnostics['failure_stage'] ?? '' ) ), 0, 32 ),
 				'validation_rule'        => substr( sanitize_key( (string) ( $diagnostics['validation_rule'] ?? '' ) ), 0, 64 ),
 				'opportunity_index'      => max( 0, min( 8, (int) ( $diagnostics['opportunity_index'] ?? 0 ) ) ),
